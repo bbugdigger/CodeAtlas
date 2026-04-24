@@ -3,8 +3,12 @@ package com.bugdigger.codeatlas.ui
 import com.bugdigger.codeatlas.index.CODE_ATLAS_INDEX_TOPIC
 import com.bugdigger.codeatlas.index.CodeAtlasIndexListener
 import com.bugdigger.codeatlas.index.CodeAtlasIndexService
+import com.bugdigger.codeatlas.index.CodeChunk
 import com.bugdigger.codeatlas.index.IndexState
+import com.bugdigger.codeatlas.rag.AnswerToken
+import com.bugdigger.codeatlas.rag.KoogAnswerGenerator
 import com.bugdigger.codeatlas.search.RankedResult
+import com.bugdigger.codeatlas.settings.CodeAtlasSettingsService
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
@@ -19,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.awt.BorderLayout
 import java.awt.event.KeyAdapter
@@ -54,10 +59,17 @@ class CodeAtlasToolWindow(
         emptyText.text = "No results yet. Wait for indexing, then search."
     }
     private val statusBar = IndexStatusBar()
-    private val searchBar = SearchBar("Ask about the codebase…", ::onSearch)
+    private val answerPanel = AnswerPanel(::navigateToChunk)
+    private val searchBar = SearchBar("Ask about the codebase…", ::onSearch, ::onAsk)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val splitter = JBSplitter(true, 1.0f).apply {
+        firstComponent = JBScrollPane(resultList)
+        secondComponent = answerPanel
+        dividerWidth = 1
+    }
 
     @Volatile private var searchJob: Job? = null
+    @Volatile private var answerJob: Job? = null
 
     val component: JComponent = buildRoot()
 
@@ -105,11 +117,6 @@ class CodeAtlasToolWindow(
     }
 
     private fun buildRoot(): JComponent {
-        val splitter = JBSplitter(true, 1.0f).apply {
-            firstComponent = JBScrollPane(resultList)
-            secondComponent = JPanel()
-            dividerWidth = 1
-        }
         return JPanel(BorderLayout()).apply {
             add(searchBar, BorderLayout.NORTH)
             add(splitter, BorderLayout.CENTER)
@@ -132,14 +139,51 @@ class CodeAtlasToolWindow(
         }
     }
 
+    private fun onAsk(query: String) {
+        if (query.isBlank()) return
+        answerJob?.cancel()
+        answerPanel.reset()
+        SwingUtilities.invokeLater { splitter.proportion = 0.5f }
+
+        val settings = project.service<CodeAtlasSettingsService>()
+        val provider = settings.resolveProvider()
+        if (provider == null) {
+            answerPanel.showStatus(
+                "Configure an LLM provider in Settings → Tools → CodeAtlas.",
+                isError = true,
+            )
+            return
+        }
+        answerPanel.showStatus("Thinking…")
+
+        answerJob = scope.launch {
+            val results = project.service<CodeAtlasIndexService>().search(query, ANSWER_TOP_K)
+            val chunks = results.map { it.chunk }
+            val generator = KoogAnswerGenerator { provider }
+            generator.generate(query, chunks).collect { token ->
+                answerPanel.consume(token)
+                if (token is AnswerToken.Delta) {
+                    answerPanel.showStatus("Streaming…")
+                } else if (token is AnswerToken.Done) {
+                    answerPanel.showStatus("Done.")
+                }
+            }
+        }
+    }
+
     private fun navigate() {
         val selected = resultList.selectedValue ?: return
-        val vfile = VirtualFileManager.getInstance().findFileByUrl(selected.chunk.virtualFileUrl)
+        navigateToChunk(selected.chunk)
+    }
+
+    private fun navigateToChunk(chunk: CodeChunk) {
+        val vfile = VirtualFileManager.getInstance().findFileByUrl(chunk.virtualFileUrl)
             ?: return
-        OpenFileDescriptor(project, vfile, selected.chunk.startOffset).navigate(true)
+        OpenFileDescriptor(project, vfile, chunk.startOffset).navigate(true)
     }
 
     companion object {
         private const val RESULT_LIMIT = 20
+        private const val ANSWER_TOP_K = 8
     }
 }
