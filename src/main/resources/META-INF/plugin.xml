@@ -28,5 +28,9 @@
             factoryClass="com.bugdigger.codeatlas.ui.CodeAtlasToolWindowFactory"/>
         <postStartupActivity
             implementation="com.bugdigger.codeatlas.startup.CodeAtlasStartupActivity"/>
+        <projectConfigurable
+            id="com.bugdigger.codeatlas.settings"
+            displayName="CodeAtlas"
+            instance="com.bugdigger.codeatlas.settings.CodeAtlasSettingsConfigurable"/>
     </extensions>
 </idea-plugin>

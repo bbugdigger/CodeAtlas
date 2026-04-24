@@ -44,6 +44,12 @@ intellijPlatform {
             Phase 1 skeleton: language adapters (Kotlin/Java), index service scaffold.
         """.trimIndent()
     }
+
+    pluginVerification {
+        ides {
+            recommended()
+        }
+    }
 }
 
 tasks {

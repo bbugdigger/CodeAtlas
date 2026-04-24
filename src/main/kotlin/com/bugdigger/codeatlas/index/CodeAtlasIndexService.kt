@@ -6,8 +6,10 @@ import com.bugdigger.codeatlas.language.sha256Hex
 import com.bugdigger.codeatlas.search.RankedResult
 import com.bugdigger.codeatlas.search.Retriever
 import com.bugdigger.codeatlas.search.VectorStore
+import com.bugdigger.codeatlas.settings.CodeAtlasSettingsService
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -74,7 +76,8 @@ class CodeAtlasIndexService(private val project: Project) {
             return
         }
         publish(IndexState.BuildingFullIndex(0, 0))
-        val result = IndexBuilder(project, embedder).build(indicator) { done, total ->
+        val includeTests = project.service<CodeAtlasSettingsService>().includeTestSources
+        val result = IndexBuilder(project, embedder).build(indicator, includeTests) { done, total ->
             publish(IndexState.BuildingFullIndex(done, total))
         }
         install(result.chunks, result.vectors)
@@ -147,6 +150,11 @@ class CodeAtlasIndexService(private val project: Project) {
 
     private fun cacheFilePath(): Path {
         val projectKey = sha256Hex(project.locationHash).take(16)
-        return Paths.get(PathManager.getSystemPath(), "CodeAtlas", projectKey, "index.bin")
+        val overrideDir = project.service<CodeAtlasSettingsService>().cacheDirOverride
+        return if (overrideDir != null) {
+            Paths.get(overrideDir, projectKey, "index.bin")
+        } else {
+            Paths.get(PathManager.getSystemPath(), "CodeAtlas", projectKey, "index.bin")
+        }
     }
 }
