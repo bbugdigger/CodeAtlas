@@ -33,4 +33,8 @@
             displayName="CodeAtlas"
             instance="com.bugdigger.codeatlas.settings.CodeAtlasSettingsConfigurable"/>
     </extensions>
+
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <supportsKotlinPluginMode supportsK2="true"/>
+    </extensions>
 </idea-plugin>
