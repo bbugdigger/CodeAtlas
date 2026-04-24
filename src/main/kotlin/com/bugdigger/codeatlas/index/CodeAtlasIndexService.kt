@@ -1,50 +1,91 @@
 package com.bugdigger.codeatlas.index
 
+import com.bugdigger.codeatlas.embedding.EmbeddingProvider
+import com.bugdigger.codeatlas.embedding.HashEmbeddingProvider
+import com.bugdigger.codeatlas.language.sha256Hex
+import com.bugdigger.codeatlas.search.RankedResult
+import com.bugdigger.codeatlas.search.Retriever
+import com.bugdigger.codeatlas.search.VectorStore
+import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
-import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.runBlocking
+import java.nio.file.Path
+import java.nio.file.Paths
 
 /**
- * Project-level service that owns the in-memory index.
+ * Project-level service that owns the retrieval index.
  *
- * Phase 1 Week 1: scaffold only. Holds the list of extracted [CodeChunk]s and exposes a
- * [requestFullIndex] entry point. Embedding, persistence, and search are added in Week 2.
+ * The [embedder] is a plain property so tests can swap in a deterministic
+ * provider before triggering [rebuildForTests]. Production uses
+ * [HashEmbeddingProvider] as the offline default in Phase 1; switch to
+ * [com.bugdigger.codeatlas.embedding.OnnxEmbeddingProvider] once the
+ * download/session path is verified (Week 4).
  */
 @Service(Service.Level.PROJECT)
 class CodeAtlasIndexService(private val project: Project) {
 
-    private val state = AtomicReference<IndexState>(IndexState.Empty)
+    internal var embedder: EmbeddingProvider = HashEmbeddingProvider()
+        set(value) {
+            // Swapping the embedder changes vector semantics and invalidates caches.
+            field = value
+            vectorStore = VectorStore(value.dim)
+        }
 
-    val chunkCount: Int
-        get() = (state.get() as? IndexState.Ready)?.chunks?.size ?: 0
+    private var vectorStore: VectorStore = VectorStore(embedder.dim)
 
-    fun snapshotChunks(): List<CodeChunk> =
-        (state.get() as? IndexState.Ready)?.chunks.orEmpty()
+    val chunkCount: Int get() = vectorStore.entryCount
 
-    /** Kicks off a full index build under a [Task.Backgroundable] with progress UI. */
+    /** Non-blocking: schedules a background build with a progress UI. */
     fun requestFullIndex() {
         val task = object : Task.Backgroundable(project, "CodeAtlas: building index", true) {
             override fun run(indicator: ProgressIndicator) {
-                indicator.text = "CodeAtlas — extracting symbols"
-                val chunks = IndexBuilder(project).buildAllChunks(indicator)
-                state.set(IndexState.Ready(chunks))
+                runBlocking { ensureIndexed(indicator) }
             }
         }
         ProgressManager.getInstance().run(task)
     }
 
-    /** Synchronous build for tests. */
-    internal fun buildForTests(indicator: ProgressIndicator): List<CodeChunk> {
-        val chunks = IndexBuilder(project).buildAllChunks(indicator)
-        state.set(IndexState.Ready(chunks))
-        return chunks
+    /** Top-level query entry point. Returns empty list if no index is loaded. */
+    suspend fun search(query: String, limit: Int): List<RankedResult> {
+        if (vectorStore.entryCount == 0) return emptyList()
+        return Retriever(embedder, vectorStore).search(query, limit)
     }
 
-    private sealed interface IndexState {
-        data object Empty : IndexState
-        data class Ready(val chunks: List<CodeChunk>) : IndexState
+    internal suspend fun ensureIndexed(indicator: ProgressIndicator) {
+        val cache = cacheFor(embedder)
+        cache.load()?.let { loaded ->
+            replaceStore(loaded.chunks, loaded.vectors)
+            return
+        }
+        val result = IndexBuilder(project, embedder).build(indicator)
+        replaceStore(result.chunks, result.vectors)
+        if (result.chunks.isNotEmpty()) {
+            cache.save(result.chunks, result.vectors)
+        }
+    }
+
+    /** Test helper: forces a fresh build and skips cache. */
+    internal suspend fun rebuildForTests(indicator: ProgressIndicator): List<CodeChunk> {
+        val result = IndexBuilder(project, embedder).build(indicator)
+        replaceStore(result.chunks, result.vectors)
+        return result.chunks
+    }
+
+    private fun replaceStore(chunks: List<CodeChunk>, vectors: List<FloatArray>) {
+        val fresh = VectorStore(embedder.dim)
+        fresh.addAll(chunks.zip(vectors))
+        vectorStore = fresh
+    }
+
+    private fun cacheFor(provider: EmbeddingProvider): PersistentCache =
+        PersistentCache(cacheFilePath(), provider.modelId, provider.dim)
+
+    private fun cacheFilePath(): Path {
+        val projectKey = sha256Hex(project.locationHash).take(16)
+        return Paths.get(PathManager.getSystemPath(), "CodeAtlas", projectKey, "index.bin")
     }
 }
