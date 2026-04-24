@@ -20,7 +20,13 @@
     <resource-bundle>messages.CodeAtlasBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- Project-level services are registered via @Service annotation (light services). -->
-        <!-- Tool window, startup activity, and settings configurable are wired in Week 3. -->
+        <!-- Project-level CodeAtlasIndexService is a light service (@Service annotation). -->
+        <toolWindow
+            id="CodeAtlas"
+            anchor="right"
+            icon="AllIcons.Toolwindows.ToolWindowFind"
+            factoryClass="com.bugdigger.codeatlas.ui.CodeAtlasToolWindowFactory"/>
+        <postStartupActivity
+            implementation="com.bugdigger.codeatlas.startup.CodeAtlasStartupActivity"/>
     </extensions>
 </idea-plugin>
