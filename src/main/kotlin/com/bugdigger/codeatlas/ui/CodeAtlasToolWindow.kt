@@ -3,6 +3,7 @@ package com.bugdigger.codeatlas.ui
 import com.bugdigger.codeatlas.index.CODE_ATLAS_INDEX_TOPIC
 import com.bugdigger.codeatlas.index.CodeAtlasIndexListener
 import com.bugdigger.codeatlas.index.CodeAtlasIndexService
+import com.bugdigger.codeatlas.index.IndexState
 import com.bugdigger.codeatlas.search.RankedResult
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.service
@@ -50,6 +51,7 @@ class CodeAtlasToolWindow(
     private val resultList = JBList(listModel).apply {
         cellRenderer = ResultListCellRenderer()
         selectionMode = ListSelectionModel.SINGLE_SELECTION
+        emptyText.text = "No results yet. Wait for indexing, then search."
     }
     private val statusBar = IndexStatusBar()
     private val searchBar = SearchBar("Ask about the codebase…", ::onSearch)
@@ -61,6 +63,15 @@ class CodeAtlasToolWindow(
 
     init {
         Disposer.register(parent, this)
+
+        val service = project.service<CodeAtlasIndexService>()
+        val initialCount = service.chunkCount
+        statusBar.update(if (initialCount > 0) {
+            IndexState.Ready(initialCount)
+        } else {
+            service.requestFullIndex()
+            IndexState.Empty
+        })
 
         resultList.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
