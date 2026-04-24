@@ -1,31 +1,26 @@
 <!-- Plugin Configuration File: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <!-- Unique identifier of the plugin. It should be FQN, cannot be changed between the plugin versions. -->
     <id>com.bugdigger.CodeAtlas</id>
-
-    <!-- Public plugin name should be written in Title Case.
-         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
     <name>CodeAtlas</name>
+    <vendor>bugdigger</vendor>
 
-    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
-
-    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
-         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Enter short description for your plugin here.<br>
-        <em>most HTML tags may be used</em>
+        <b>CodeAtlas</b> — natural-language code navigation for IntelliJ IDEA.<br>
+        Ask questions like <em>"where is authentication implemented?"</em> and jump directly to the
+        matching class or method. Uses a locally-bundled embedding model; works fully offline, no
+        API key required.
     ]]></description>
 
-    <!-- Product and plugin compatibility requirements.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
+    <!-- Phase 1 supports Kotlin + Java. The LanguageAdapter layer is designed to accept more
+         languages later without changes to the core. -->
     <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+    <depends>org.jetbrains.kotlin</depends>
 
-    <resource-bundle>messages.MyMessageBundle</resource-bundle>
-    <!-- Extensions defined by the plugin.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <resource-bundle>messages.CodeAtlasBundle</resource-bundle>
+
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow id="MyToolWindow" factoryClass="com.bugdigger.codeatlas.MyToolWindowFactory"
-                    icon="AllIcons.Toolwindows.ToolWindowPalette"/>
+        <!-- Project-level services are registered via @Service annotation (light services). -->
+        <!-- Tool window, startup activity, and settings configurable are wired in Week 3. -->
     </extensions>
 </idea-plugin>

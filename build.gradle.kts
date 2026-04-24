@@ -14,16 +14,24 @@ repositories {
     }
 }
 
-// Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
         intellijIdea("2025.2.4")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
-
-        // Add plugin dependencies for compilation here, example:
-        // bundledPlugin("com.intellij.java")
+        // Kotlin PSI + Java PSI are the two language frontends we extract chunks from in Phase 1.
+        bundledPlugin("com.intellij.java")
+        bundledPlugin("org.jetbrains.kotlin")
     }
+
+    // ONNX Runtime for running the bundled embedding model locally in the IDE process.
+    implementation("com.microsoft.onnxruntime:onnxruntime:1.20.0")
+
+    // HuggingFace tokenizer via DJL — required by the ONNX model input pipeline (WordPiece / BPE).
+    implementation("ai.djl.huggingface:tokenizers:0.31.0")
+
+    // JUnit 4 for unit tests; BasePlatformTestCase / LightJavaCodeInsightFixtureTestCase use JUnit 3/4 style.
+    testImplementation("junit:junit:4.13.2")
 }
 
 intellijPlatform {
@@ -33,16 +41,20 @@ intellijPlatform {
         }
 
         changeNotes = """
-            Initial version
+            Phase 1 skeleton: language adapters (Kotlin/Java), index service scaffold.
         """.trimIndent()
     }
 }
 
 tasks {
-    // Set the JVM compatibility versions
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+
+    test {
+        // BasePlatformTestCase tests use JUnit 3/4-style runners.
+        useJUnit()
     }
 }
 
