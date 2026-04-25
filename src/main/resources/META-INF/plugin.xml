@@ -46,5 +46,28 @@
             description="Search CodeAtlas for the selected text, or for the symbol at the caret.">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
+
+        <group
+            id="CodeAtlas.ToolsGroup"
+            text="CodeAtlas"
+            description="CodeAtlas index management actions"
+            popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action
+                id="CodeAtlas.FocusSearchAction"
+                class="com.bugdigger.codeatlas.actions.FocusCodeAtlasSearchAction"
+                text="Focus Search"
+                description="Open the CodeAtlas tool window and focus the search field."/>
+            <action
+                id="CodeAtlas.RebuildIndexAction"
+                class="com.bugdigger.codeatlas.actions.RebuildIndexAction"
+                text="Rebuild Index"
+                description="Force a fresh full reindex of the open project."/>
+            <action
+                id="CodeAtlas.ClearCacheAction"
+                class="com.bugdigger.codeatlas.actions.ClearCacheAction"
+                text="Clear Cache and Rebuild"
+                description="Delete the persisted index cache and rebuild from scratch."/>
+        </group>
     </actions>
 </idea-plugin>

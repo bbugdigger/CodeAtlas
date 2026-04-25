@@ -23,6 +23,12 @@ class CodeAtlasToolWindowAccess {
         toolWindow.activate({ window?.runQuery(query) }, true, true)
     }
 
+    /** Activate the tool window and move keyboard focus into the search field. */
+    fun focusSearch(project: Project) {
+        val toolWindow = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID) ?: return
+        toolWindow.activate({ window?.focusSearch() }, true, true)
+    }
+
     companion object {
         const val TOOL_WINDOW_ID = "CodeAtlas"
     }

@@ -9,9 +9,13 @@ import com.intellij.ui.components.JBScrollPane
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Cursor
+import java.awt.FlowLayout
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.BoxLayout
+import javax.swing.JButton
 import javax.swing.JPanel
 import javax.swing.JTextPane
 import javax.swing.SwingUtilities
@@ -30,6 +34,7 @@ import javax.swing.text.StyleConstants
  */
 class AnswerPanel(
     private val onCitationClick: (CodeChunk) -> Unit,
+    private val onStop: () -> Unit = {},
 ) : JPanel(BorderLayout()) {
 
     private val textPane = JTextPane().apply {
@@ -46,6 +51,27 @@ class AnswerPanel(
         foreground = JBColor.GRAY
         isVisible = false
     }
+    private val copyButton = JButton("Copy").apply {
+        toolTipText = "Copy the answer text to the clipboard"
+        addActionListener { copyAnswer() }
+    }
+    private val stopButton = JButton("Stop").apply {
+        toolTipText = "Stop the current answer generation"
+        isVisible = false
+        addActionListener {
+            onStop()
+            isVisible = false
+        }
+    }
+    private val controls = JPanel(FlowLayout(FlowLayout.RIGHT, 4, 0)).apply {
+        isOpaque = false
+        add(copyButton)
+        add(stopButton)
+    }
+    private val header = JPanel(BorderLayout()).apply {
+        add(statusLabel, BorderLayout.WEST)
+        add(controls, BorderLayout.EAST)
+    }
     private val content = JPanel(BorderLayout()).apply {
         add(textPane, BorderLayout.NORTH)
         add(sourcesPanel, BorderLayout.CENTER)
@@ -56,7 +82,7 @@ class AnswerPanel(
     private var sources: List<CodeChunk> = emptyList()
 
     init {
-        add(statusLabel, BorderLayout.NORTH)
+        add(header, BorderLayout.NORTH)
         add(scroll, BorderLayout.CENTER)
         textPane.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) = handleTextClick(e)
@@ -82,6 +108,11 @@ class AnswerPanel(
         statusLabel.isVisible = true
     }
 
+    /** Toggle the Stop button's visibility while a generation is in flight. */
+    fun setStreaming(active: Boolean): Unit = onEdt {
+        stopButton.isVisible = active
+    }
+
     /** Feeds one token from the [AnswerToken] stream. Safe from any thread. */
     fun consume(token: AnswerToken) = onEdt {
         when (token) {
@@ -92,12 +123,21 @@ class AnswerPanel(
                 for (seg in parser.finish()) appendSegment(seg)
                 sources = token.sources
                 renderSources()
+                stopButton.isVisible = false
             }
             is AnswerToken.Error -> {
                 for (seg in parser.finish()) appendSegment(seg)
                 showStatus(token.message, isError = true)
+                stopButton.isVisible = false
             }
         }
+    }
+
+    private fun copyAnswer() {
+        val text = textPane.text.orEmpty()
+        if (text.isBlank()) return
+        Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+        showStatus("Copied to clipboard.")
     }
 
     private fun appendSegment(seg: CitationParser.Segment) {

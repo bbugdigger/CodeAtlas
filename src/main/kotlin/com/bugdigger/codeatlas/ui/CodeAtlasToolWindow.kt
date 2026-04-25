@@ -1,5 +1,6 @@
 package com.bugdigger.codeatlas.ui
 
+import com.bugdigger.codeatlas.CodeAtlasBundle
 import com.bugdigger.codeatlas.index.CODE_ATLAS_INDEX_TOPIC
 import com.bugdigger.codeatlas.index.CodeAtlasIndexListener
 import com.bugdigger.codeatlas.index.CodeAtlasIndexService
@@ -58,11 +59,20 @@ class CodeAtlasToolWindow(
     private val resultList = JBList(listModel).apply {
         cellRenderer = ResultListCellRenderer()
         selectionMode = ListSelectionModel.SINGLE_SELECTION
-        emptyText.text = "No results yet. Wait for indexing, then search."
     }
+
+    @Volatile private var lastIndexState: IndexState = IndexState.Empty
+    @Volatile private var lastQuery: String = ""
     private val statusBar = IndexStatusBar()
-    private val answerPanel = AnswerPanel(::navigateToChunk)
-    private val searchBar = SearchBar("Ask about the codebase…", ::onSearch, ::onAsk)
+    private val answerPanel = AnswerPanel(
+        onCitationClick = ::navigateToChunk,
+        onStop = { answerJob?.cancel() },
+    )
+    private val searchBar = SearchBar(
+        placeholder = CodeAtlasBundle.message("toolwindow.search.placeholder"),
+        onSearch = ::onSearch,
+        onAsk = ::onAsk,
+    )
     private val findUsagesController = FindUsagesController(project)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val splitter = JBSplitter(true, 1.0f).apply {
@@ -81,12 +91,15 @@ class CodeAtlasToolWindow(
 
         val service = project.service<CodeAtlasIndexService>()
         val initialCount = service.chunkCount
-        statusBar.update(if (initialCount > 0) {
+        val initialState = if (initialCount > 0) {
             IndexState.Ready(initialCount)
         } else {
             service.requestFullIndex()
             IndexState.Empty
-        })
+        }
+        statusBar.update(initialState)
+        lastIndexState = initialState
+        updateEmptyText()
 
         resultList.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
@@ -112,7 +125,11 @@ class CodeAtlasToolWindow(
         project.messageBus.connect(this).subscribe(
             CODE_ATLAS_INDEX_TOPIC,
             CodeAtlasIndexListener { state ->
-                SwingUtilities.invokeLater { statusBar.update(state) }
+                lastIndexState = state
+                SwingUtilities.invokeLater {
+                    statusBar.update(state)
+                    updateEmptyText()
+                }
             },
         )
     }
@@ -129,6 +146,11 @@ class CodeAtlasToolWindow(
         }
     }
 
+    /** External entry point for the "Focus CodeAtlas Search" action. */
+    fun focusSearch() {
+        SwingUtilities.invokeLater { searchBar.requestFieldFocus() }
+    }
+
     private fun buildRoot(): JComponent {
         return JPanel(BorderLayout()).apply {
             add(searchBar, BorderLayout.NORTH)
@@ -139,8 +161,12 @@ class CodeAtlasToolWindow(
 
     private fun onSearch(query: String) {
         searchJob?.cancel()
+        lastQuery = query
         if (query.isBlank()) {
-            SwingUtilities.invokeLater { listModel.clear() }
+            SwingUtilities.invokeLater {
+                listModel.clear()
+                updateEmptyText()
+            }
             return
         }
         searchJob = scope.launch {
@@ -148,6 +174,7 @@ class CodeAtlasToolWindow(
             SwingUtilities.invokeLater {
                 listModel.clear()
                 for (r in results) listModel.addElement(r)
+                updateEmptyText()
             }
         }
     }
@@ -162,24 +189,57 @@ class CodeAtlasToolWindow(
         val provider = settings.resolveProvider()
         if (provider == null) {
             answerPanel.showStatus(
-                "Configure an LLM provider in Settings → Tools → CodeAtlas.",
+                CodeAtlasBundle.message("error.no.provider.configured"),
                 isError = true,
             )
             return
         }
         answerPanel.showStatus("Thinking…")
+        answerPanel.setStreaming(true)
 
         answerJob = scope.launch {
-            val results = project.service<CodeAtlasIndexService>().search(query, ANSWER_TOP_K)
-            val chunks = results.map { it.chunk }
-            val generator = KoogAnswerGenerator { provider }
-            generator.generate(query, chunks).collect { token ->
-                answerPanel.consume(token)
-                if (token is AnswerToken.Delta) {
-                    answerPanel.showStatus("Streaming…")
-                } else if (token is AnswerToken.Done) {
-                    answerPanel.showStatus("Done.")
+            try {
+                val results = project.service<CodeAtlasIndexService>().search(query, ANSWER_TOP_K)
+                val chunks = results.map { it.chunk }
+                val generator = KoogAnswerGenerator(providerSupplier = { provider })
+                generator.generate(query, chunks).collect { token ->
+                    answerPanel.consume(token)
+                    if (token is AnswerToken.Delta) {
+                        answerPanel.showStatus("Streaming…")
+                    } else if (token is AnswerToken.Done) {
+                        answerPanel.showStatus("Done.")
+                    }
                 }
+            } finally {
+                answerPanel.setStreaming(false)
+            }
+        }
+    }
+
+    /**
+     * Refresh the result list's empty-state text based on the current
+     * [IndexState] and whether the user has issued a query yet.
+     *
+     * Three states:
+     *  1. Index not Ready → "No index yet. Indexing…"
+     *  2. Ready, query issued → "No matches. Try rephrasing."
+     *  3. Ready, no query → first-run hint with sample queries.
+     */
+    private fun updateEmptyText() {
+        val text = resultList.emptyText
+        text.clear()
+        when {
+            lastIndexState !is IndexState.Ready -> {
+                text.appendText(CodeAtlasBundle.message("search.empty.no_index"))
+            }
+            lastQuery.isNotBlank() -> {
+                text.appendText(CodeAtlasBundle.message("search.empty.no_matches"))
+            }
+            else -> {
+                text.appendText(CodeAtlasBundle.message("search.first_run.title"))
+                text.appendLine(CodeAtlasBundle.message("search.first_run.try.1"))
+                text.appendLine(CodeAtlasBundle.message("search.first_run.try.2"))
+                text.appendLine(CodeAtlasBundle.message("search.first_run.try.3"))
             }
         }
     }

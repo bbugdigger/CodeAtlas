@@ -7,11 +7,16 @@ import ai.onnxruntime.OrtSession
 import com.intellij.openapi.application.PathManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
+import java.time.Duration
 import kotlin.math.sqrt
 
 /**
@@ -101,10 +106,40 @@ class OnnxEmbeddingProvider(
             }
             return file
         }
-        URI(downloadUrl).toURL().openStream().use { input ->
-            Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
-        }
+        downloadTo(downloadUrl, file)
         return file
+    }
+
+    /**
+     * Stream [url] to [dest] using the JDK HTTP client. Bounded by an explicit
+     * connect/read timeout so a hung connection cannot stall the index task
+     * forever. Partial downloads are deleted on failure so a retry sees a
+     * clean slate. The HTTP status is checked BEFORE writing the body so we
+     * do not save a 4xx error page (e.g. "Entry not found") as if it were
+     * the model file.
+     */
+    private fun downloadTo(url: String, dest: Path) {
+        val client = HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.ALWAYS)
+            .build()
+        val request = HttpRequest.newBuilder(URI(url))
+            .timeout(REQUEST_TIMEOUT)
+            .GET()
+            .build()
+        try {
+            val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
+            if (response.statusCode() !in 200..299) {
+                response.body().close()
+                throw IOException("HTTP ${response.statusCode()} for $url")
+            }
+            response.body().use { input ->
+                Files.copy(input, dest, StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (t: Throwable) {
+            runCatching { Files.deleteIfExists(dest) }
+            throw t
+        }
     }
 
     private fun embedOne(
@@ -173,6 +208,9 @@ class OnnxEmbeddingProvider(
         // Classpath path for the optionally-bundled model. When present, this path
         // wins over the network download. See src/main/resources/model/MODEL_CARD.md.
         private const val BUNDLED_MODEL_RESOURCE = "/model/bge-small-en-v1.5-int8.onnx"
+
+        private val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(30)
+        private val REQUEST_TIMEOUT: Duration = Duration.ofMinutes(5)
 
         // DJL's HuggingFaceTokenizer.newInstance(Path) reads tokenizer.json from a directory.
         // We pre-stage this file so the native tokenizer never invokes its HTTP download path,

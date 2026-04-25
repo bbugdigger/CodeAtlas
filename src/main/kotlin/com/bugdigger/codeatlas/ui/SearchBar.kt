@@ -60,6 +60,12 @@ class SearchBar(
         fire()
     }
 
+    /** Move keyboard focus into the text field (e.g. for the "Focus CodeAtlas Search" action). */
+    fun requestFieldFocus() {
+        field.requestFocusInWindow()
+        field.selectAll()
+    }
+
     private fun fire() {
         onSearch(field.text.orEmpty())
     }

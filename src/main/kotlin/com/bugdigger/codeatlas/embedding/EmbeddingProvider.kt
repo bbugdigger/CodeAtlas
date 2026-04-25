@@ -13,5 +13,12 @@ interface EmbeddingProvider {
 
     suspend fun embed(texts: List<String>): List<FloatArray>
 
-    suspend fun embedOne(text: String): FloatArray = embed(listOf(text)).first()
+    /**
+     * Convenience wrapper that survives both an empty input and a provider that
+     * returns an empty list (e.g. ONNX init failure swallowed upstream). Callers
+     * downstream score zero against a zero vector, gracefully producing no hits
+     * instead of crashing the search pipeline.
+     */
+    suspend fun embedOne(text: String): FloatArray =
+        embed(listOf(text)).firstOrNull() ?: FloatArray(dim)
 }

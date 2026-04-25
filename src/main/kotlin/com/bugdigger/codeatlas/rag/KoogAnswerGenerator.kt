@@ -29,6 +29,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class KoogAnswerGenerator(
     private val providerSupplier: () -> LlmProvider,
+    private val maxResolveBytes: Long = MAX_RESOLVE_BYTES,
 ) : AnswerGenerator {
 
     override fun generate(query: String, chunks: List<CodeChunk>): Flow<AnswerToken> = flow {
@@ -62,18 +63,21 @@ class KoogAnswerGenerator(
         emit(AnswerToken.Error("Unexpected error: ${t::class.simpleName}"))
     }
 
-    private fun resolveSources(chunks: List<CodeChunk>): List<RetrievedChunk> {
+    internal fun resolveSources(chunks: List<CodeChunk>): List<RetrievedChunk> {
         if (chunks.isEmpty()) return emptyList()
         return ReadAction.compute<List<RetrievedChunk>, RuntimeException> {
             val vfm = VirtualFileManager.getInstance()
             chunks.map { chunk ->
                 val file = vfm.findFileByUrl(chunk.virtualFileUrl)
-                val text = if (file != null && file.isValid) {
+                val text = if (file != null && file.isValid && file.length <= maxResolveBytes) {
                     val doc = file.contentsToByteArray().toString(Charsets.UTF_8)
                     val start = chunk.startOffset.coerceIn(0, doc.length)
                     val end = chunk.endOffset.coerceIn(start, doc.length)
                     doc.substring(start, end)
                 } else {
+                    // File missing, invalidated, or too large to load safely (e.g. a generated
+                    // multi-megabyte source). Fall back to the chunk signature so the prompt
+                    // still cites *something* without OOM-ing the IDE.
                     chunk.signature
                 }
                 RetrievedChunk(chunk, text)
@@ -110,5 +114,10 @@ class KoogAnswerGenerator(
         return cleaned
             .replace(Regex("(?i)(authorization|x-api-key)\\s*[:=]\\s*\\S+"), "$1: ***")
             .replace(Regex("sk-[A-Za-z0-9_-]{10,}"), "sk-***")
+    }
+
+    companion object {
+        /** Hard ceiling on the size of a single source file we'll load to resolve a chunk. */
+        internal const val MAX_RESOLVE_BYTES = 2L * 1024 * 1024
     }
 }
