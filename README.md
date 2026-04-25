@@ -16,6 +16,10 @@ Ask questions like _"where is authentication implemented?"_ or _"how does the pa
 - **Persistent per-project, per-model index cache.** Index once, reuse across IDE restarts. Switch embedders without losing prior caches.
 - **Tools menu actions:** Focus Search, Rebuild Index, Clear Cache and Rebuild.
 
+<p align="center">
+  <img src="src/main/resources/META-INF/CodeAtlas2.png" alt="CodeAtlas tool window with search results and answer panel" width="720" />
+</p>
+
 ## Install
 
 Until the plugin is on the JetBrains Marketplace, install from disk:
