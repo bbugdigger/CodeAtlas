@@ -5,6 +5,7 @@ import com.bugdigger.codeatlas.embedding.HashEmbeddingProvider
 import com.bugdigger.codeatlas.language.sha256Hex
 import com.bugdigger.codeatlas.search.RankedResult
 import com.bugdigger.codeatlas.search.Retriever
+import com.bugdigger.codeatlas.search.StubIndexSignal
 import com.bugdigger.codeatlas.search.VectorStore
 import com.bugdigger.codeatlas.settings.CodeAtlasSettingsService
 import com.intellij.openapi.application.PathManager
@@ -64,7 +65,7 @@ class CodeAtlasIndexService(private val project: Project) {
     suspend fun search(query: String, limit: Int): List<RankedResult> {
         val (hasEntries, snapshot) = synchronized(lock) { (chunks.isNotEmpty()) to store }
         if (!hasEntries) return emptyList()
-        return Retriever(embedder, snapshot).search(query, limit)
+        return Retriever(embedder, snapshot, StubIndexSignal(project)).search(query, limit)
     }
 
     /** Load from cache or run a full build. Publishes [IndexState] throughout. */

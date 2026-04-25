@@ -32,7 +32,9 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import javax.swing.DefaultListModel
 import javax.swing.JComponent
+import javax.swing.JMenuItem
 import javax.swing.JPanel
+import javax.swing.JPopupMenu
 import javax.swing.ListSelectionModel
 import javax.swing.SwingUtilities
 
@@ -61,6 +63,7 @@ class CodeAtlasToolWindow(
     private val statusBar = IndexStatusBar()
     private val answerPanel = AnswerPanel(::navigateToChunk)
     private val searchBar = SearchBar("Ask about the codebase…", ::onSearch, ::onAsk)
+    private val findUsagesController = FindUsagesController(project)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val splitter = JBSplitter(true, 1.0f).apply {
         firstComponent = JBScrollPane(resultList)
@@ -94,6 +97,8 @@ class CodeAtlasToolWindow(
                     navigate()
                 }
             }
+            override fun mousePressed(e: MouseEvent) = maybeShowContextMenu(e)
+            override fun mouseReleased(e: MouseEvent) = maybeShowContextMenu(e)
         })
         resultList.addKeyListener(object : KeyAdapter() {
             override fun keyPressed(e: KeyEvent) {
@@ -174,6 +179,20 @@ class CodeAtlasToolWindow(
     private fun navigate() {
         val selected = resultList.selectedValue ?: return
         navigateToChunk(selected.chunk)
+    }
+
+    private fun maybeShowContextMenu(e: MouseEvent) {
+        if (!e.isPopupTrigger) return
+        val idx = resultList.locationToIndex(e.point)
+        if (idx < 0 || !resultList.getCellBounds(idx, idx).contains(e.point)) return
+        resultList.selectedIndex = idx
+        val sel = resultList.selectedValue ?: return
+        val menu = JPopupMenu().apply {
+            add(JMenuItem("Find usages").apply {
+                addActionListener { findUsagesController.findUsagesFor(sel.chunk) }
+            })
+        }
+        menu.show(resultList, e.x, e.y)
     }
 
     private fun navigateToChunk(chunk: CodeChunk) {

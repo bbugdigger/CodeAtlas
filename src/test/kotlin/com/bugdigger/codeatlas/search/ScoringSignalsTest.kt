@@ -40,7 +40,6 @@ class ScoringSignalsTest {
             doc = "Authenticates the user.",
         )
         val fused = ScoringSignals.score(c, vectorScore = 0.5f, query = "how does login handle")
-        // Expected components:
         val name = ScoringSignals.identifierMatch(c, "how does login handle")
         val kind = ScoringSignals.kindFit(c, "how does login handle")
         val expected = ScoringSignals.W_VECTOR * 0.5f +
@@ -48,6 +47,14 @@ class ScoringSignalsTest {
             ScoringSignals.W_KIND * kind +
             ScoringSignals.W_DOC * 1f
         assertEquals(expected, fused, 1e-6f)
+    }
+
+    @Test
+    fun stubBoostAddsExactlyWStubToTheFinalScore() {
+        val c = chunk("demo.AuthService", "class AuthService", kind = ChunkKind.CLASS)
+        val without = ScoringSignals.score(c, vectorScore = 0.5f, query = "AuthService", stubBoost = 0f)
+        val with = ScoringSignals.score(c, vectorScore = 0.5f, query = "AuthService", stubBoost = 1f)
+        assertEquals(ScoringSignals.W_STUB, with - without, 1e-6f)
     }
 
     private fun chunk(

@@ -10,6 +10,7 @@ import com.bugdigger.codeatlas.index.CodeChunk
  *              + `W_NAME   * identifierMatch(chunk, query)`
  *              + `W_KIND   * kindFit(chunk, query)`
  *              + `W_DOC    * (chunk has doc comment ? 1 : 0)`
+ *              + `W_STUB   * stubBoost`     (0 or 1, supplied by [StubIndexSignal])
  *
  * Weights are plain constants. Iterate them against a hand-labeled eval set.
  */
@@ -20,11 +21,27 @@ object ScoringSignals {
     const val W_KIND = 0.05f
     const val W_DOC = 0.10f
 
-    fun score(chunk: CodeChunk, vectorScore: Float, query: String): Float {
+    /**
+     * Stub-index match is an additive bonus, not a re-balance of the other weights.
+     * When [StubIndexSignal] resolves a query token to an actual project symbol whose
+     * FQN equals a candidate's, lift it by [W_STUB] on top of its other signals.
+     */
+    const val W_STUB = 0.15f
+
+    fun score(
+        chunk: CodeChunk,
+        vectorScore: Float,
+        query: String,
+        stubBoost: Float = 0f,
+    ): Float {
         val name = identifierMatch(chunk, query)
         val kind = kindFit(chunk, query)
         val doc = if (!chunk.docComment.isNullOrBlank()) 1f else 0f
-        return W_VECTOR * vectorScore + W_NAME * name + W_KIND * kind + W_DOC * doc
+        return W_VECTOR * vectorScore +
+            W_NAME * name +
+            W_KIND * kind +
+            W_DOC * doc +
+            W_STUB * stubBoost
     }
 
     /** Fraction of query tokens (length ≥ 3) that appear in the chunk's name or signature. */
