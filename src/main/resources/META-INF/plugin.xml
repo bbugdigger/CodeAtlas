@@ -2,13 +2,34 @@
 <idea-plugin>
     <id>com.bugdigger.CodeAtlas</id>
     <name>CodeAtlas</name>
-    <vendor>bugdigger</vendor>
+    <vendor email="dognus818@gmail.com" url="https://github.com/bbugdigger/CodeAtlas">bugdigger</vendor>
 
     <description><![CDATA[
-        <b>CodeAtlas</b> — natural-language code navigation for IntelliJ IDEA.<br>
-        Ask questions like <em>"where is authentication implemented?"</em> and jump directly to the
-        matching class or method. Uses a locally-bundled embedding model; works fully offline, no
-        API key required.
+        <h3>Natural-language code navigation for IntelliJ IDEA.</h3>
+        <p>
+          Ask questions like <em>"where is authentication implemented?"</em> or
+          <em>"how does the payment flow work?"</em> and jump directly to the
+          matching class, method, or top-level function.
+        </p>
+        <h4>How it works</h4>
+        <ul>
+          <li><b>Search runs fully offline.</b> A small embedding model
+              (BGE-small INT8, ~33 MB) is bundled with the plugin and runs in the
+              IDE process. No API key or network connection is required for
+              search.</li>
+          <li><b>Optional answers with citations.</b> Click <em>Ask</em> to get a
+              streamed natural-language answer that cites the source code it
+              quotes. Bring your own LLM provider — Anthropic, OpenAI, or a
+              local Ollama instance. API keys live in IntelliJ's PasswordSafe
+              and are never sent anywhere except your chosen provider.</li>
+          <li><b>Right-click integration.</b> Select code in the editor, then
+              <em>Ask CodeAtlas</em> to search for the selection or the symbol
+              at the caret without leaving the file.</li>
+        </ul>
+        <h4>Supported languages</h4>
+        <p>Kotlin and Java in this release. The
+           <code>LanguageAdapter</code> layer is designed to accept more
+           languages in future versions.</p>
     ]]></description>
 
     <!-- Phase 1 supports Kotlin + Java. The LanguageAdapter layer is designed to accept more

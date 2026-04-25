@@ -5,7 +5,8 @@ plugins {
 }
 
 group = "com.bugdigger"
-version = "1.0-SNAPSHOT"
+// Override on the command line for snapshot builds: `-Pversion=1.0.1-SNAPSHOT`
+version = (project.findProperty("version") as? String).takeUnless { it == "unspecified" } ?: "1.0.0"
 
 repositories {
     mavenCentral()
@@ -46,10 +47,29 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "252.25557"
+            // Cap at the 2025.2 minor series. When 2026.1 ships, run verifyPlugin
+            // against it, then bump this to the next series cap (e.g. "261.*").
+            untilBuild = "252.*"
         }
 
         changeNotes = """
-            Phase 1 skeleton: language adapters (Kotlin/Java), index service scaffold.
+            <h3>1.0.0 — Initial release</h3>
+            <ul>
+              <li>Semantic code search over Kotlin and Java sources, powered by a
+                  locally-bundled ONNX embedding model (BGE-small INT8). No network
+                  calls during search.</li>
+              <li>Right-click <em>Ask CodeAtlas</em> in the editor to query the
+                  current selection or symbol at the caret.</li>
+              <li>Optional retrieval-augmented answers with citation-clickable
+                  sources. Bring your own provider — Anthropic, OpenAI, or local
+                  Ollama. API keys live in IntelliJ's PasswordSafe.</li>
+              <li>Tools menu actions: <em>Focus Search</em>, <em>Rebuild Index</em>,
+                  <em>Clear Cache and Rebuild</em>.</li>
+              <li>Per-project, per-model persistent cache that survives IDE
+                  restarts and embedder swaps.</li>
+              <li>Settings: provider configuration with live <em>Test connection</em>
+                  buttons, includeTestSources, cache directory override.</li>
+            </ul>
         """.trimIndent()
     }
 
@@ -57,6 +77,24 @@ intellijPlatform {
         ides {
             recommended()
         }
+    }
+
+    // Signing + publishing read all credentials from environment variables so
+    // nothing secret enters the build script or git history. Set these before
+    // running `signPlugin` / `publishPlugin`:
+    //   CERTIFICATE_CHAIN          - PEM-encoded chain (multiline, paste verbatim)
+    //   PRIVATE_KEY                - PEM-encoded private key (multiline)
+    //   PRIVATE_KEY_PASSWORD       - passphrase for the private key
+    //   PUBLISH_TOKEN              - JetBrains Marketplace upload token
+    // See https://plugins.jetbrains.com/docs/intellij/plugin-signing.html
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
     }
 }
 
