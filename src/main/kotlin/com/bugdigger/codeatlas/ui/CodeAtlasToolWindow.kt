@@ -121,6 +121,14 @@ class CodeAtlasToolWindow(
         scope.cancel()
     }
 
+    /** Drive the search bar from outside (e.g. the "Ask CodeAtlas" editor action). */
+    fun runQuery(query: String) {
+        if (query.isBlank()) return
+        SwingUtilities.invokeLater {
+            searchBar.setTextAndSearch(query)
+        }
+    }
+
     private fun buildRoot(): JComponent {
         return JPanel(BorderLayout()).apply {
             add(searchBar, BorderLayout.NORTH)

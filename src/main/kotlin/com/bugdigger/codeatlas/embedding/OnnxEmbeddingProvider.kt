@@ -16,11 +16,14 @@ import kotlin.math.sqrt
 
 /**
  * Real embedder backed by BAAI/bge-small-en-v1.5 (INT8-quantized ONNX export).
+ * Default provider for [com.bugdigger.codeatlas.index.CodeAtlasIndexService].
  *
- * Not the default provider in Phase 1 Week 2 — the model file is ~33MB and is
- * downloaded lazily from Hugging Face on first use. [HashEmbeddingProvider] is
- * wired in [com.bugdigger.codeatlas.index.CodeAtlasIndexService] until the
- * download/session path has been verified on a range of networks.
+ * Model loading order on first use:
+ *  1. If a copy already lives at `<systemPath>/CodeAtlas/models/<MODEL_FILENAME>`, use it.
+ *  2. Else if a bundled resource is present at [BUNDLED_MODEL_RESOURCE], copy it out
+ *     to that path. This is the offline-first path for marketplace builds that ship
+ *     the model in the plugin JAR.
+ *  3. Else fall back to a one-time download from [MODEL_URL] over the public network.
  *
  * Inputs: `input_ids`, `attention_mask`, `token_type_ids` (all int64 `[1, seq]`).
  * Output: `last_hidden_state` `[1, seq, 384]`; mean-pooled with the attention
@@ -53,24 +56,53 @@ class OnnxEmbeddingProvider(
     private fun initialize() {
         if (tokenizer != null && session != null) return
         synchronized(lock) {
-            if (tokenizer == null) {
-                tokenizer = HuggingFaceTokenizer.newInstance("BAAI/bge-small-en-v1.5")
-            }
-            if (session == null) {
-                val e = OrtEnvironment.getEnvironment()
-                env = e
-                session = e.createSession(ensureModelFile().toString(), OrtSession.SessionOptions())
+            // DJL's Platform.detectPlatform locates its native-lib properties file via
+            // Thread.currentThread().getContextClassLoader().getResources(...). Inside an
+            // IntelliJ plugin the thread's context CL is the IDE's platform classloader,
+            // which can't see resources packaged in this plugin's JAR — so the lookup
+            // fails with "No tokenizers version found in property file." Pin the plugin
+            // classloader for the duration of init and restore afterwards. ONNX Runtime
+            // is wrapped in the same swap defensively.
+            val originalCl = Thread.currentThread().contextClassLoader
+            try {
+                Thread.currentThread().contextClassLoader = OnnxEmbeddingProvider::class.java.classLoader
+                if (tokenizer == null) {
+                    // Pre-stage tokenizer.json on disk and load by Path. Avoids the native
+                    // tokenizer's HF auto-download path, which fails inside the IntelliJ
+                    // sandbox with "Bad URL: RelativeUrlWithoutBase".
+                    ensureTokenizerFile()
+                    tokenizer = HuggingFaceTokenizer.newInstance(modelDir)
+                }
+                if (session == null) {
+                    val e = OrtEnvironment.getEnvironment()
+                    env = e
+                    session = e.createSession(ensureModelFile().toString(), OrtSession.SessionOptions())
+                }
+            } finally {
+                Thread.currentThread().contextClassLoader = originalCl
             }
         }
     }
 
-    private fun ensureModelFile(): Path {
-        val file = modelDir.resolve(MODEL_FILENAME)
-        if (!Files.exists(file)) {
-            Files.createDirectories(modelDir)
-            URI(MODEL_URL).toURL().openStream().use { input ->
+    private fun ensureModelFile(): Path =
+        ensureFile(MODEL_FILENAME, BUNDLED_MODEL_RESOURCE, MODEL_URL)
+
+    private fun ensureTokenizerFile(): Path =
+        ensureFile(TOKENIZER_FILENAME, BUNDLED_TOKENIZER_RESOURCE, TOKENIZER_URL)
+
+    private fun ensureFile(filename: String, bundledResource: String, downloadUrl: String): Path {
+        val file = modelDir.resolve(filename)
+        if (Files.exists(file)) return file
+        Files.createDirectories(modelDir)
+        val bundled = OnnxEmbeddingProvider::class.java.getResourceAsStream(bundledResource)
+        if (bundled != null) {
+            bundled.use { input ->
                 Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
             }
+            return file
+        }
+        URI(downloadUrl).toURL().openStream().use { input ->
+            Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
         }
         return file
     }
@@ -130,10 +162,26 @@ class OnnxEmbeddingProvider(
     }
 
     companion object {
-        // INT8 quantized export from the official bge-small ONNX bundle on Hugging Face.
+        // INT8 quantized export from Xenova/bge-small-en-v1.5 — a community port that
+        // publishes self-contained single-file ONNX models. The official BAAI repo's
+        // model.onnx splits weights into model.onnx_data, which fails to load through
+        // a single resource lookup. ~33 MB.
         private const val MODEL_URL =
-            "https://huggingface.co/BAAI/bge-small-en-v1.5/resolve/main/onnx/model_quantized.onnx"
+            "https://huggingface.co/Xenova/bge-small-en-v1.5/resolve/main/onnx/model_quantized.onnx"
         private const val MODEL_FILENAME = "bge-small-en-v1.5-int8.onnx"
+
+        // Classpath path for the optionally-bundled model. When present, this path
+        // wins over the network download. See src/main/resources/model/MODEL_CARD.md.
+        private const val BUNDLED_MODEL_RESOURCE = "/model/bge-small-en-v1.5-int8.onnx"
+
+        // DJL's HuggingFaceTokenizer.newInstance(Path) reads tokenizer.json from a directory.
+        // We pre-stage this file so the native tokenizer never invokes its HTTP download path,
+        // which fails inside the IntelliJ sandbox. Sourced from the same Xenova port for
+        // consistency with [MODEL_URL] — the BERT-style tokenizer is identical across forks.
+        private const val TOKENIZER_URL =
+            "https://huggingface.co/Xenova/bge-small-en-v1.5/resolve/main/tokenizer.json"
+        private const val TOKENIZER_FILENAME = "tokenizer.json"
+        private const val BUNDLED_TOKENIZER_RESOURCE = "/model/tokenizer.json"
 
         fun defaultModelDir(): Path =
             Paths.get(PathManager.getSystemPath(), "CodeAtlas", "models")

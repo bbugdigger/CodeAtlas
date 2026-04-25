@@ -1,7 +1,7 @@
 package com.bugdigger.codeatlas.index
 
 import com.bugdigger.codeatlas.embedding.EmbeddingProvider
-import com.bugdigger.codeatlas.embedding.HashEmbeddingProvider
+import com.bugdigger.codeatlas.embedding.OnnxEmbeddingProvider
 import com.bugdigger.codeatlas.language.sha256Hex
 import com.bugdigger.codeatlas.search.RankedResult
 import com.bugdigger.codeatlas.search.Retriever
@@ -34,7 +34,7 @@ import java.nio.file.Paths
 @Service(Service.Level.PROJECT)
 class CodeAtlasIndexService(private val project: Project) {
 
-    internal var embedder: EmbeddingProvider = HashEmbeddingProvider()
+    internal var embedder: EmbeddingProvider = OnnxEmbeddingProvider()
         set(value) {
             field = value
             synchronized(lock) {

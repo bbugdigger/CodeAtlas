@@ -53,6 +53,13 @@ class SearchBar(
         }
     }
 
+    /** External entry point: replace the field text and run a search immediately, bypassing debounce. */
+    fun setTextAndSearch(text: String) {
+        field.text = text
+        timer.stop()
+        fire()
+    }
+
     private fun fire() {
         onSearch(field.text.orEmpty())
     }

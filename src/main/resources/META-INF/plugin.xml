@@ -37,4 +37,14 @@
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
         <supportsKotlinPluginMode supportsK2="true"/>
     </extensions>
+
+    <actions>
+        <action
+            id="CodeAtlas.AskAction"
+            class="com.bugdigger.codeatlas.actions.AskCodeAtlasAction"
+            text="Ask CodeAtlas"
+            description="Search CodeAtlas for the selected text, or for the symbol at the caret.">
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

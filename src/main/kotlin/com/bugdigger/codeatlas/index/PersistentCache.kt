@@ -106,6 +106,12 @@ class PersistentCache(
 
     companion object {
         private const val MAGIC = 0x434F4441 // "CODA"
-        private const val SCHEMA_VERSION = 1
+
+        // Bumped to 2 alongside the embedder default flip from HashEmbeddingProvider to
+        // OnnxEmbeddingProvider — old caches contain hash-projection vectors that are
+        // incompatible with bge-small embeddings even though both are 384-dim, and the
+        // (modelId, dim) check alone wouldn't flag a cache that was built locally with
+        // a custom HashEmbeddingProvider(dim = 384).
+        private const val SCHEMA_VERSION = 2
     }
 }
