@@ -1,6 +1,10 @@
-# CodeAtlas
+<p align="center">
+  <img src="src/main/resources/META-INF/pluginIcon.svg" alt="CodeAtlas logo" width="120" />
+</p>
 
-Natural-language code navigation for IntelliJ IDEA.
+<h1 align="center">CodeAtlas</h1>
+
+<p align="center"><em>Natural-language code navigation for IntelliJ IDEA.</em></p>
 
 Ask questions like _"where is authentication implemented?"_ or _"how does the payment flow work?"_ and jump straight to the matching class, method, or top-level function. Optionally, get a streamed natural-language answer with citation-clickable sources.
 
