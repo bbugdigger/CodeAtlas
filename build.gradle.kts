@@ -1,6 +1,9 @@
 plugins {
     id("java")
     id("org.jetbrains.kotlin.jvm") version "2.2.20"
+    // Generates `.serializer()` factories for @Serializable classes used by the MCP wire DTOs.
+    // Pinned to the same Kotlin version as the kotlin-jvm plugin to keep compiler plugins consistent.
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
     id("org.jetbrains.intellij.platform") version "2.10.2"
 }
 
@@ -35,6 +38,24 @@ dependencies {
     // Exclude the standard kotlinx-coroutines artifact so we use IntelliJ's patched build instead (which adds
     // `runBlockingWithParallelismCompensation` required by the IDE test framework).
     implementation("ai.koog:koog-agents:0.7.3") {
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    }
+
+    // Model Context Protocol — server SDK + Ktor CIO engine for the embedded localhost HTTP transport.
+    // The SDK does not ship a Ktor engine; CIO is the lightest server engine that works for an embedded
+    // service. Koog 0.7.3 already pulls Ktor client artifacts transitively, so the version of Ktor used
+    // here is the one resolved across both modules.
+    //
+    // Exclude the standard kotlinx-coroutines artifact (same exclusion as on Koog above) so we keep
+    // using IntelliJ's patched coroutines build, which provides `runBlockingWithParallelismCompensation`
+    // required by the IDE test framework. Without this, BasePlatformTestCase tests fail at app boot
+    // with NoSuchMethodError on that symbol.
+    implementation("io.modelcontextprotocol:kotlin-sdk-server:0.11.1") {
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
+        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
+    }
+    implementation("io.ktor:ktor-server-cio:3.0.3") {
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
     }

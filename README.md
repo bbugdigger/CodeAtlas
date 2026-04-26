@@ -15,6 +15,7 @@ Ask questions like _"where is authentication implemented?"_ or _"how does the pa
 - **Optional retrieval-augmented answers** with clickable citations. Bring your own LLM provider — Anthropic, OpenAI, or local [Ollama](https://ollama.com/). API keys live in IntelliJ's PasswordSafe.
 - **Persistent per-project, per-model index cache.** Index once, reuse across IDE restarts. Switch embedders without losing prior caches.
 - **Tools menu actions:** Focus Search, Rebuild Index, Clear Cache and Rebuild.
+- **Model Context Protocol (MCP) server.** Exposes the active project's index over a local HTTP endpoint so external AI hosts — Claude Desktop, Claude Code CLI, Cursor — can call CodeAtlas as a tool.
 
 <p align="center">
   <img src="src/main/resources/META-INF/CodeAtlas2.png" alt="CodeAtlas tool window with search results and answer panel" width="720" />
@@ -62,6 +63,31 @@ Use the **Test connection** button to verify before saving.
 - Click a result to jump to the symbol; **double-click** or **Enter** also navigates.
 - Right-click in the editor → **Ask CodeAtlas** to query the selection or the identifier at the caret.
 - Click **Ask** in the tool window to get a streamed natural-language answer; click citations like `[2]` to jump to the cited source.
+
+## MCP server
+
+CodeAtlas runs an embedded [Model Context Protocol](https://modelcontextprotocol.io/) server on `127.0.0.1` so other AI tools can query your local index. The server starts automatically when the plugin loads (one server per IDE instance, shared across all open projects — tool calls always target the most recently focused one).
+
+### Tools exposed
+
+- **`search_code`** — semantic search over the active project's index. Args: `query` (string, required), `limit` (1–50, default 10), `include_snippet` (bool, default true). Returns a JSON array of ranked hits with file path, qualified name, kind, signature, score, and (optionally) the source snippet.
+- **`ask_codebase`** — retrieval-augmented answer. Args: `query` (string, required), `top_k` (1–20, default 8). Retrieves grounding chunks via `search_code`, then has the LLM provider configured under **Settings → CodeAtlas** generate an answer. Returns the answer text plus a JSON `sources` array. Requires a configured LLM provider.
+
+### Connecting a host
+
+Open **Settings → CodeAtlas → MCP server** and click **Copy Claude Desktop config**. The clipboard receives:
+
+```json
+{
+  "mcpServers": {
+    "codeatlas": { "url": "http://127.0.0.1:64340/mcp" }
+  }
+}
+```
+
+Paste into `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and restart Claude Desktop. The same URL works with any MCP host that supports the streamable HTTP transport.
+
+The default port is `64340`; change it in the same settings panel if it conflicts. Disable the server entirely by unchecking **Enable MCP server**.
 
 ## Build from source
 

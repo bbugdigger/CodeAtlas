@@ -49,10 +49,20 @@
             factoryClass="com.bugdigger.codeatlas.ui.CodeAtlasToolWindowFactory"/>
         <postStartupActivity
             implementation="com.bugdigger.codeatlas.startup.CodeAtlasStartupActivity"/>
+        <postStartupActivity
+            implementation="com.bugdigger.codeatlas.mcp.McpServerLifecycle"/>
         <projectConfigurable
             id="com.bugdigger.codeatlas.settings"
             displayName="CodeAtlas"
             instance="com.bugdigger.codeatlas.settings.CodeAtlasSettingsConfigurable"/>
+
+        <!-- Application-scoped services for the embedded MCP server (one server per IDE instance). -->
+        <applicationService
+            serviceImplementation="com.bugdigger.codeatlas.mcp.McpServerSettings"/>
+        <applicationService
+            serviceImplementation="com.bugdigger.codeatlas.mcp.ActiveProjectTracker"/>
+        <applicationService
+            serviceImplementation="com.bugdigger.codeatlas.mcp.McpServerService"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">

@@ -1,9 +1,12 @@
 package com.bugdigger.codeatlas.settings
 
+import com.bugdigger.codeatlas.mcp.McpServerService
+import com.bugdigger.codeatlas.mcp.McpServerSettings
 import com.bugdigger.codeatlas.rag.ConnectionTester
 import com.bugdigger.codeatlas.rag.LlmProvider
 import com.bugdigger.codeatlas.rag.LlmProviderKind
 import com.intellij.openapi.components.service
+import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.options.Configurable
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.project.Project
@@ -20,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.awt.CardLayout
+import java.awt.datatransfer.StringSelection
 import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JComboBox
@@ -38,6 +42,10 @@ import javax.swing.SwingUtilities
  *  - Each hosted provider has an API key field (backed by [PasswordSafe] on
  *    apply), a help link to the provider's API key console, and a Test
  *    Connection button that fires a tiny live request through [ConnectionTester].
+ *  - MCP server section: enable toggle, port, status, and a "Copy Claude
+ *    Desktop config" button. These settings are application-scoped (one MCP
+ *    server per IDE instance) but exposed in the project configurable for
+ *    discoverability — the apply path triggers a server restart.
  *
  * API key fields start empty and are written to PasswordSafe only on [apply]
  * when the user has edited them, so re-opening the dialog never exposes
@@ -69,6 +77,12 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
     private val ollamaTestButton = JButton("Test connection")
     private val ollamaTestStatus = statusLabel()
 
+    private val mcpEnabledCheckBox =
+        JCheckBox("Enable MCP server (shared across all open projects in this IDE)")
+    private val mcpPortField = JTextField()
+    private val mcpStatusLabel = statusLabel()
+    private val mcpCopyConfigButton = JButton("Copy Claude Desktop config")
+
     // Track whether the user edited a password field since last reset; only then do we write.
     private var anthropicKeyDirty = false
     private var openAiKeyDirty = false
@@ -99,18 +113,26 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
             runTest(LlmProviderKind.OLLAMA, ollamaTestStatus, ollamaTestButton)
         }
 
+        mcpCopyConfigButton.addActionListener { copyClaudeDesktopConfig() }
+
         return FormBuilder.createFormBuilder()
             .addComponent(includeTestsCheckBox)
             .addLabeledComponent("Cache directory override", cacheDirField)
             .addSeparator()
             .addLabeledComponent("LLM provider", providerCombo)
             .addComponent(providerCards)
+            .addSeparator()
+            .addComponent(mcpEnabledCheckBox)
+            .addLabeledComponent("MCP server port", mcpPortField)
+            .addComponent(mcpStatusLabel)
+            .addComponent(mcpCopyConfigButton)
             .addComponentFillVertically(JPanel(), 0)
             .panel
     }
 
     override fun isModified(): Boolean {
         val s = project.service<CodeAtlasSettingsService>()
+        val mcp = McpServerSettings.getInstance()
         return includeTestsCheckBox.isSelected != s.includeTestSources ||
             cacheDirField.text.trim().ifEmpty { null } != s.cacheDirOverride ||
             providerCombo.selectedItem != s.llmProvider ||
@@ -118,6 +140,8 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
             openAiModelField.text.trim() != s.openAiModel ||
             ollamaEndpointField.text.trim() != s.ollamaEndpoint ||
             ollamaModelField.text.trim() != s.ollamaModel ||
+            mcpEnabledCheckBox.isSelected != mcp.enabled ||
+            parsedMcpPort() != mcp.port ||
             anthropicKeyDirty ||
             openAiKeyDirty
     }
@@ -146,6 +170,19 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
             openAiKeyDirty = false
             openAiKeyField.toolTipText = tooltipFor(s.getApiKey(LlmProviderKind.OPENAI))
         }
+
+        val mcp = McpServerSettings.getInstance()
+        val newPort = parsedMcpPort()
+        val mcpChanged = mcpEnabledCheckBox.isSelected != mcp.enabled || newPort != mcp.port
+        if (mcpChanged) {
+            mcp.enabled = mcpEnabledCheckBox.isSelected
+            mcp.port = newPort
+            // Restart asynchronously so apply() returns quickly even on a slow port rebind.
+            testScope.launch(Dispatchers.IO) {
+                runCatching { McpServerService.getInstance().restart() }
+                SwingUtilities.invokeLater { refreshMcpStatus() }
+            }
+        }
     }
 
     override fun reset() {
@@ -167,6 +204,12 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
         anthropicTestStatus.text = ""
         openAiTestStatus.text = ""
         ollamaTestStatus.text = ""
+
+        val mcp = McpServerSettings.getInstance()
+        mcpEnabledCheckBox.isSelected = mcp.enabled
+        mcpPortField.text = mcp.port.toString()
+        refreshMcpStatus()
+
         showActiveProviderCard()
     }
 
@@ -277,6 +320,49 @@ class CodeAtlasSettingsConfigurable(private val project: Project) :
             override fun removeUpdate(e: javax.swing.event.DocumentEvent) = onChange()
             override fun changedUpdate(e: javax.swing.event.DocumentEvent) = onChange()
         }
+
+    private fun parsedMcpPort(): Int {
+        val raw = mcpPortField.text.trim().toIntOrNull() ?: McpServerSettings.DEFAULT_PORT
+        return raw.coerceIn(McpServerSettings.MIN_PORT, McpServerSettings.MAX_PORT)
+    }
+
+    private fun refreshMcpStatus() {
+        when (val s = McpServerService.getInstance().currentStatus) {
+            is McpServerService.Status.Listening -> {
+                mcpStatusLabel.foreground = JBColor.namedColor(
+                    "Component.successColor", JBColor(0x008000, 0x6CB33F),
+                )
+                mcpStatusLabel.text = "Listening on ${McpServerService.url(s.port)}"
+                mcpCopyConfigButton.isEnabled = true
+            }
+            is McpServerService.Status.Stopped -> {
+                mcpStatusLabel.foreground = JBColor.GRAY
+                mcpStatusLabel.text = "Disabled"
+                mcpCopyConfigButton.isEnabled = mcpEnabledCheckBox.isSelected
+            }
+            is McpServerService.Status.Failed -> {
+                mcpStatusLabel.foreground = JBColor.RED
+                mcpStatusLabel.text = "Port ${s.port} unavailable: ${s.reason.take(120)}"
+                mcpCopyConfigButton.isEnabled = false
+            }
+        }
+    }
+
+    private fun copyClaudeDesktopConfig() {
+        val port = parsedMcpPort()
+        val snippet = """
+            {
+              "mcpServers": {
+                "codeatlas": { "url": "${McpServerService.url(port)}" }
+              }
+            }
+        """.trimIndent()
+        CopyPasteManager.getInstance().setContents(StringSelection(snippet))
+        mcpStatusLabel.foreground = JBColor.namedColor(
+            "Component.successColor", JBColor(0x008000, 0x6CB33F),
+        )
+        mcpStatusLabel.text = "Config snippet copied to clipboard."
+    }
 
     private companion object {
         const val ANTHROPIC_KEYS_URL = "https://console.anthropic.com/settings/keys"
