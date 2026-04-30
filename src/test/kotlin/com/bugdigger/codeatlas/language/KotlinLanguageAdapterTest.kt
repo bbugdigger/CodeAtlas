@@ -45,6 +45,38 @@ class KotlinLanguageAdapterTest : BasePlatformTestCase() {
         assertEquals("demo", topChunk.containerFqn)
     }
 
+    fun testClassSignatureSkipsLeadingKDoc() {
+        // Regression: PSI's `decl.text` includes the leading KDoc, so a naive `firstLine`
+        // returned "/**" as the class signature — that string then leaked into Search
+        // Everywhere rows AND into the embedding input.
+        val file = myFixture.configureByText(
+            "Doc.kt",
+            """
+            package demo
+
+            /**
+             * Many lines.
+             *
+             * Of doc.
+             */
+            class Documented(val n: Int)
+            """.trimIndent(),
+        )
+
+        val classChunk = KotlinLanguageAdapter().extract(file)
+            .single { it.qualifiedName == "demo.Documented" }
+
+        assertFalse(
+            "signature should not start with KDoc opener: ${classChunk.signature}",
+            classChunk.signature.startsWith("/*") ||
+                classChunk.signature.startsWith("*"),
+        )
+        assertTrue(
+            "signature should include the class declaration: ${classChunk.signature}",
+            classChunk.signature.contains("class Documented"),
+        )
+    }
+
     fun testInterfaceAndObjectKinds() {
         val file = myFixture.configureByText(
             "Types.kt",

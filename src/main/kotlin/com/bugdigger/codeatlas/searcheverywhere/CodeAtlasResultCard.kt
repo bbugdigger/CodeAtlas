@@ -8,34 +8,25 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.Color
-import java.awt.Font
-import javax.swing.BoxLayout
 import javax.swing.Icon
 import javax.swing.JPanel
 
 /**
  * Row component rendered for each [RankedResult] in the Search Everywhere
- * "Code Atlas" tab. Lays out: [icon] [qualified name + signature stacked] [file name].
+ * "Code Atlas" tab. Lays out: [icon] [qualified name] [file name].
  */
 class CodeAtlasResultCard : JPanel(BorderLayout(8, 0)) {
 
     private val iconLabel = JBLabel()
-    private val nameLabel = JBLabel().apply { font = font.deriveFont(Font.BOLD) }
-    private val sigLabel = JBLabel()
-    private val pathLabel = JBLabel().apply { font = font.deriveFont(font.size2D - 1f) }
+    private val nameLabel = JBLabel()
+    private val pathLabel = JBLabel()
 
     init {
         border = JBUI.Borders.empty(4, 8)
         isOpaque = true
 
-        val center = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            isOpaque = false
-            add(nameLabel)
-            add(sigLabel)
-        }
         add(iconLabel, BorderLayout.WEST)
-        add(center, BorderLayout.CENTER)
+        add(nameLabel, BorderLayout.CENTER)
         add(pathLabel, BorderLayout.EAST)
     }
 
@@ -43,14 +34,12 @@ class CodeAtlasResultCard : JPanel(BorderLayout(8, 0)) {
         val chunk = result.chunk
         iconLabel.icon = iconFor(chunk.kind)
         nameLabel.text = chunk.qualifiedName
-        sigLabel.text = chunk.signature
         pathLabel.text = fileName(chunk.virtualFileUrl)
     }
 
     fun applySelection(bg: Color, fg: Color, selected: Boolean) {
         background = bg
         nameLabel.foreground = fg
-        sigLabel.foreground = if (selected) fg else JBColor.GRAY
         pathLabel.foreground = if (selected) fg else JBColor.GRAY
     }
 

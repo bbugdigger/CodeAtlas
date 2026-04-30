@@ -91,6 +91,18 @@ class JavaLanguageAdapter : LanguageAdapter {
     private fun paramSuffix(method: PsiMethod): String =
         method.parameterList.parameters.joinToString(",", "(", ")") { it.type.presentableText }
 
+    // First line of [text] that's actual code, not a leading kdoc/javadoc/line comment.
+    // PSI's clazz.text includes the leading doc comment, so a naive first-non-blank line
+    // returns the kdoc opener for any class with a doc comment — that string then ends up
+    // as the row signature in Search Everywhere AND inside the embedding input.
     private fun firstLine(text: String): String? =
-        text.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+        text.lineSequence()
+            .map { it.trim() }
+            .firstOrNull { line ->
+                line.isNotEmpty() &&
+                    !line.startsWith("/**") &&
+                    !line.startsWith("*/") &&
+                    !line.startsWith("*") &&
+                    !line.startsWith("//")
+            }
 }

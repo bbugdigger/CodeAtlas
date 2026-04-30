@@ -112,6 +112,9 @@ class PersistentCache(
         // incompatible with bge-small embeddings even though both are 384-dim, and the
         // (modelId, dim) check alone wouldn't flag a cache that was built locally with
         // a custom HashEmbeddingProvider(dim = 384).
-        private const val SCHEMA_VERSION = 2
+        // v3 (1.1.0): class signatures no longer include the leading kdoc/javadoc opener.
+        // Bumping invalidates v2 caches so existing users get a fresh embedding pass with
+        // the cleaner signatures (also affects ranking weight on signature tokens).
+        private const val SCHEMA_VERSION = 3
     }
 }
