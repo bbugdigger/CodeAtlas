@@ -6,24 +6,40 @@
 
 <p align="center"><em>Natural-language code navigation for IntelliJ IDEA.</em></p>
 
-Ask questions like _"where is authentication implemented?"_ or _"how does the payment flow work?"_ and jump straight to the matching class, method, or top-level function. Optionally, get a streamed natural-language answer with citation-clickable sources.
+<p align="center">
+  <a href="https://plugins.jetbrains.com/plugin/31457-codeatlas">
+    <img src="https://img.shields.io/jetbrains/plugin/v/31457-codeatlas?label=JetBrains%20Marketplace&color=2BA1E2&logo=jetbrains" alt="JetBrains Marketplace" />
+  </a>
+  <a href="https://plugins.jetbrains.com/plugin/31457-codeatlas">
+    <img src="https://img.shields.io/jetbrains/plugin/d/31457-codeatlas?label=downloads&color=2BA1E2" alt="Downloads" />
+  </a>
+</p>
+
+Press **Shift-Shift**, switch to the **Code Atlas** tab, and ask questions like _"where is authentication implemented?"_ or _"how does the payment flow work?"_ — jump straight to the matching class, method, or top-level function.
 
 ## Features
 
-- **Semantic search over Kotlin and Java**, fully offline. Powered by a locally-bundled INT8-quantized [BGE-small](https://huggingface.co/Xenova/bge-small-en-v1.5) ONNX embedding model running through ONNX Runtime in the IDE process.
-- **Right-click _Ask CodeAtlas_** in the editor to query the current selection or the symbol at the caret.
-- **Optional retrieval-augmented answers** with clickable citations. Bring your own LLM provider — Anthropic, OpenAI, or local [Ollama](https://ollama.com/). API keys live in IntelliJ's PasswordSafe.
+- **Semantic search over Kotlin and Java**, fully offline. Powered by a locally-bundled INT8-quantized [BGE-small](https://huggingface.co/Xenova/bge-small-en-v1.5) ONNX embedding model running through ONNX Runtime in the IDE process. No API keys, no network calls.
+- **Search Everywhere integration.** Lives as a dedicated tab in IntelliJ's Search Everywhere popup (Shift-Shift). No extra tool window competing for screen space.
+- **Status-bar widget.** Shows index progress (`indexing 412/9 800` → `ready · 5 678 symbols`); click it to open the Code Atlas tab or kick off a rebuild.
+- **Right-click _Search with CodeAtlas_** in the editor to query the current selection or the symbol at the caret.
 - **Persistent per-project, per-model index cache.** Index once, reuse across IDE restarts. Switch embedders without losing prior caches.
 - **Tools menu actions:** Focus Search, Rebuild Index, Clear Cache and Rebuild.
 - **Model Context Protocol (MCP) server.** Exposes the active project's index over a local HTTP endpoint so external AI hosts — Claude Desktop, Claude Code CLI, Cursor — can call CodeAtlas as a tool.
 
 <p align="center">
-  <img src="src/main/resources/META-INF/CodeAtlas2.png" alt="CodeAtlas tool window with search results and answer panel" width="720" />
+  <img src="src/main/resources/META-INF/CodeAtlas-Example.png" alt="CodeAtlas Search Everywhere tab with semantic search results" width="720" />
 </p>
 
 ## Install
 
-Until the plugin is on the JetBrains Marketplace, install from disk:
+Requires IntelliJ Platform 2026.1 or newer.
+
+**From the JetBrains Marketplace** ([plugin page](https://plugins.jetbrains.com/plugin/31457-codeatlas)):
+
+In IntelliJ IDEA, open **Settings → Plugins → Marketplace**, search for `CodeAtlas`, and click **Install**.
+
+**From disk** (for local builds or pre-release ZIPs):
 
 1. Build the plugin ZIP:
    ```bash
@@ -48,21 +64,13 @@ See [`src/main/resources/model/MODEL_CARD.md`](src/main/resources/model/MODEL_CA
 
 If the plugin starts up and these files are missing from the JAR, it falls back to a one-time download from Hugging Face into the IDE system path. That fallback path requires network access.
 
-To enable the optional **Ask** feature, configure an LLM provider under **Settings → Tools → CodeAtlas**:
-
-- **Anthropic** — paste your key from [console.anthropic.com](https://console.anthropic.com/settings/keys), pick a model.
-- **OpenAI** — paste your key from [platform.openai.com](https://platform.openai.com/api-keys), pick a model.
-- **Ollama** — point at your local endpoint (default `http://localhost:11434`), pick a model you've pulled.
-
-Use the **Test connection** button to verify before saving.
-
 ## Usage
 
-- The CodeAtlas tool window lives on the right edge after install.
-- Type a question in the search bar — results stream in after a 300 ms idle window or immediately on Enter.
-- Click a result to jump to the symbol; **double-click** or **Enter** also navigates.
-- Right-click in the editor → **Ask CodeAtlas** to query the selection or the identifier at the caret.
-- Click **Ask** in the tool window to get a streamed natural-language answer; click citations like `[2]` to jump to the cited source.
+- Press **Shift-Shift**, switch to the **Code Atlas** tab. Type a natural-language question or a code-like query.
+- **Enter** on a row jumps to the symbol at its declaration site.
+- The status-bar widget (bottom of the IDE) shows index state. Click it while the index is _ready_ to open the Code Atlas tab; click while it's empty/building to (re-)trigger a full index.
+- Right-click in the editor → **Search with CodeAtlas** opens the Code Atlas tab pre-filled with the selection or the identifier at the caret.
+- Tools menu → **CodeAtlas** has **Focus Search** (Shift-Shift shortcut to our tab), **Rebuild Index**, and **Clear Cache and Rebuild**.
 
 ## MCP server
 
@@ -71,7 +79,6 @@ CodeAtlas runs an embedded [Model Context Protocol](https://modelcontextprotocol
 ### Tools exposed
 
 - **`search_code`** — semantic search over the active project's index. Args: `query` (string, required), `limit` (1–50, default 10), `include_snippet` (bool, default true). Returns a JSON array of ranked hits with file path, qualified name, kind, signature, score, and (optionally) the source snippet.
-- **`ask_codebase`** — retrieval-augmented answer. Args: `query` (string, required), `top_k` (1–20, default 8). Retrieves grounding chunks via `search_code`, then has the LLM provider configured under **Settings → CodeAtlas** generate an answer. Returns the answer text plus a JSON `sources` array. Requires a configured LLM provider.
 
 ### Connecting a host
 
@@ -88,6 +95,14 @@ Open **Settings → CodeAtlas → MCP server** and click **Copy Claude Desktop c
 Paste into `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and restart Claude Desktop. The same URL works with any MCP host that supports the streamable HTTP transport.
 
 The default port is `64340`; change it in the same settings panel if it conflicts. Disable the server entirely by unchecking **Enable MCP server**.
+
+## Settings
+
+Under **Settings → Tools → CodeAtlas**:
+
+- **Include test sources in indexing** — off by default; turn on to include `src/test/...` content in search results.
+- **Cache directory override** — use a non-default location for the persistent index cache (advanced).
+- **MCP server** — enable/disable, port, status, and the **Copy Claude Desktop config** button.
 
 ## Build from source
 
