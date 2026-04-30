@@ -1,10 +1,10 @@
 plugins {
     id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.2.20"
+    id("org.jetbrains.kotlin.jvm") version "2.3.21"
     // Generates `.serializer()` factories for @Serializable classes used by the MCP wire DTOs.
     // Pinned to the same Kotlin version as the kotlin-jvm plugin to keep compiler plugins consistent.
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.20"
-    id("org.jetbrains.intellij.platform") version "2.10.2"
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.3.21"
+    id("org.jetbrains.intellij.platform") version "2.15.0"
 }
 
 group = "com.bugdigger"
@@ -20,7 +20,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        intellijIdea("2025.2.4")
+        intellijIdea("2026.1.1")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Kotlin PSI + Java PSI are the two language frontends we extract chunks from in Phase 1.
@@ -34,23 +34,13 @@ dependencies {
     // HuggingFace tokenizer via DJL — required by the ONNX model input pipeline (WordPiece / BPE).
     implementation("ai.djl.huggingface:tokenizers:0.31.0")
 
-    // Koog — JetBrains LLM orchestration framework (Phase 2 RAG layer). Pinned; swap behind AnswerGenerator interface.
-    // Exclude the standard kotlinx-coroutines artifact so we use IntelliJ's patched build instead (which adds
-    // `runBlockingWithParallelismCompensation` required by the IDE test framework).
-    implementation("ai.koog:koog-agents:0.7.3") {
-        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
-        exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
-    }
-
     // Model Context Protocol — server SDK + Ktor CIO engine for the embedded localhost HTTP transport.
     // The SDK does not ship a Ktor engine; CIO is the lightest server engine that works for an embedded
-    // service. Koog 0.7.3 already pulls Ktor client artifacts transitively, so the version of Ktor used
-    // here is the one resolved across both modules.
+    // service.
     //
-    // Exclude the standard kotlinx-coroutines artifact (same exclusion as on Koog above) so we keep
-    // using IntelliJ's patched coroutines build, which provides `runBlockingWithParallelismCompensation`
-    // required by the IDE test framework. Without this, BasePlatformTestCase tests fail at app boot
-    // with NoSuchMethodError on that symbol.
+    // Exclude the standard kotlinx-coroutines artifact so we keep using IntelliJ's patched coroutines
+    // build, which provides `runBlockingWithParallelismCompensation` required by the IDE test framework.
+    // Without this, BasePlatformTestCase tests fail at app boot with NoSuchMethodError on that symbol.
     implementation("io.modelcontextprotocol:kotlin-sdk-server:0.11.1") {
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core")
         exclude(group = "org.jetbrains.kotlinx", module = "kotlinx-coroutines-core-jvm")
@@ -67,29 +57,39 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "252.25557"
-            // Cap at the 2025.2 minor series. When 2026.1 ships, run verifyPlugin
-            // against it, then bump this to the next series cap (e.g. "261.*").
-            untilBuild = "252.*"
+            // Wildcards are not allowed in sinceBuild; use a concrete platform build
+            // (matches the IDE we develop against — IU-2026.1.1 = build 261.23567).
+            sinceBuild = "261"
+            // Tracking the 2026.1 minor series; bump on the next IDEA release.
+            untilBuild = "261.*"
         }
 
         changeNotes = """
+            <h3>1.1.0</h3>
+            <ul>
+              <li>Search Everywhere integration: press <em>Shift-Shift</em>, switch to the
+                  <em>Code Atlas</em> tab, and search the project's semantic index without
+                  leaving the editor.</li>
+              <li>Removed the right-side tool window. Index status now lives as a small
+                  widget in the IDE status bar; click it to open Search Everywhere or
+                  to trigger a rebuild.</li>
+              <li>Removed the optional remote-LLM "Ask" feature, the associated provider
+                  settings (Anthropic / OpenAI / Ollama, model fields, API-key entry, test
+                  buttons), and the corresponding MCP <code>ask_codebase</code> tool.
+                  CodeAtlas is now fully offline.</li>
+              <li>Old API keys remain in IntelliJ's PasswordSafe and can be cleared via
+                  Settings → Appearance &amp; Behavior → System Settings → Passwords.</li>
+              <li>Compatible with IntelliJ Platform 2026.1.</li>
+            </ul>
             <h3>1.0.0 — Initial release</h3>
             <ul>
               <li>Semantic code search over Kotlin and Java sources, powered by a
                   locally-bundled ONNX embedding model (BGE-small INT8). No network
                   calls during search.</li>
-              <li>Right-click <em>Ask CodeAtlas</em> in the editor to query the
-                  current selection or symbol at the caret.</li>
-              <li>Optional retrieval-augmented answers with citation-clickable
-                  sources. Bring your own provider — Anthropic, OpenAI, or local
-                  Ollama. API keys live in IntelliJ's PasswordSafe.</li>
               <li>Tools menu actions: <em>Focus Search</em>, <em>Rebuild Index</em>,
                   <em>Clear Cache and Rebuild</em>.</li>
               <li>Per-project, per-model persistent cache that survives IDE
                   restarts and embedder swaps.</li>
-              <li>Settings: provider configuration with live <em>Test connection</em>
-                  buttons, includeTestSources, cache directory override.</li>
             </ul>
         """.trimIndent()
     }

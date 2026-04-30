@@ -1,9 +1,7 @@
 package com.bugdigger.codeatlas.mcp
 
-import com.bugdigger.codeatlas.mcp.tools.AskCodebaseTool
 import com.bugdigger.codeatlas.mcp.tools.SearchCodeTool
 import com.bugdigger.codeatlas.mcp.tools.ToolResult
-import com.bugdigger.codeatlas.mcp.tools.askBackendFor
 import com.bugdigger.codeatlas.mcp.tools.searchBackendFor
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -27,9 +25,8 @@ import kotlinx.serialization.json.put
 /**
  * Application-scoped owner of the embedded MCP server.
  *
- * One server per IDE instance. Binds Ktor + CIO to `127.0.0.1:<port>` and exposes two MCP tools:
+ * One server per IDE instance. Binds Ktor + CIO to `127.0.0.1:<port>` and exposes one MCP tool:
  *  - [SearchCodeTool.NAME] — semantic search over the active project's CodeAtlas index.
- *  - [AskCodebaseTool.NAME] — retrieval-augmented answers using the configured LLM provider.
  *
  * Lifecycle:
  *  - [ensureStarted] is called from [McpServerLifecycle] on the first project open.
@@ -129,7 +126,6 @@ class McpServerService : Disposable {
             ),
         )
         registerSearchCodeTool(server)
-        registerAskCodebaseTool(server)
         return server
     }
 
@@ -141,20 +137,6 @@ class McpServerService : Disposable {
             name = SearchCodeTool.NAME,
             description = SearchCodeTool.DESCRIPTION,
             inputSchema = searchCodeSchema(),
-        ) { request ->
-            val args = request.arguments ?: buildJsonObject { }
-            tool.handle(args).toCallToolResult()
-        }
-    }
-
-    private fun registerAskCodebaseTool(server: Server) {
-        val tool = AskCodebaseTool {
-            ActiveProjectTracker.getInstance().currentProject()?.let(::askBackendFor)
-        }
-        server.addTool(
-            name = AskCodebaseTool.NAME,
-            description = AskCodebaseTool.DESCRIPTION,
-            inputSchema = askCodebaseSchema(),
         ) { request ->
             val args = request.arguments ?: buildJsonObject { }
             tool.handle(args).toCallToolResult()
@@ -212,26 +194,6 @@ private fun searchCodeSchema(): ToolSchema = ToolSchema(
                 "If false, omit the source snippet text and return only locations + metadata"
             ))
             put("default", JsonPrimitive(SearchCodeTool.DEFAULT_INCLUDE_SNIPPET))
-        })
-    },
-    required = listOf("query"),
-)
-
-private fun askCodebaseSchema(): ToolSchema = ToolSchema(
-    properties = buildJsonObject {
-        put("query", buildJsonObject {
-            put("type", JsonPrimitive("string"))
-            put("description", JsonPrimitive("Natural-language question about the codebase"))
-        })
-        put("top_k", buildJsonObject {
-            put("type", JsonPrimitive("integer"))
-            put("description", JsonPrimitive(
-                "How many code chunks to retrieve as grounding context " +
-                    "(default ${AskCodebaseTool.DEFAULT_TOP_K})"
-            ))
-            put("default", JsonPrimitive(AskCodebaseTool.DEFAULT_TOP_K))
-            put("minimum", JsonPrimitive(AskCodebaseTool.MIN_TOP_K))
-            put("maximum", JsonPrimitive(AskCodebaseTool.MAX_TOP_K))
         })
     },
     required = listOf("query"),

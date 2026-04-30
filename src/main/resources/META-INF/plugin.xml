@@ -7,24 +7,25 @@
     <description><![CDATA[
         <h3>Natural-language code navigation for IntelliJ IDEA.</h3>
         <p>
-          Ask questions like <em>"where is authentication implemented?"</em> or
-          <em>"how does the payment flow work?"</em> and jump directly to the
-          matching class, method, or top-level function.
+          Press <em>Shift-Shift</em>, switch to the <em>Code Atlas</em> tab, and ask
+          questions like <em>"where is authentication implemented?"</em> or
+          <em>"how does the payment flow work?"</em> — jump straight to the matching
+          class, method, or top-level function.
         </p>
         <h4>How it works</h4>
         <ul>
           <li><b>Search runs fully offline.</b> A small embedding model
               (BGE-small INT8, ~33 MB) is bundled with the plugin and runs in the
-              IDE process. No API key or network connection is required for
-              search.</li>
-          <li><b>Optional answers with citations.</b> Click <em>Ask</em> to get a
-              streamed natural-language answer that cites the source code it
-              quotes. Bring your own LLM provider — Anthropic, OpenAI, or a
-              local Ollama instance. API keys live in IntelliJ's PasswordSafe
-              and are never sent anywhere except your chosen provider.</li>
+              IDE process. No API key or network connection is required.</li>
+          <li><b>Search Everywhere integration.</b> CodeAtlas appears as its own
+              tab in IntelliJ's Search Everywhere popup. A status-bar widget shows
+              index progress and offers one-click access to the search.</li>
           <li><b>Right-click integration.</b> Select code in the editor, then
-              <em>Ask CodeAtlas</em> to search for the selection or the symbol
-              at the caret without leaving the file.</li>
+              <em>Search with CodeAtlas</em> to query for the selection or the
+              symbol at the caret without leaving the file.</li>
+          <li><b>MCP server.</b> Optional: expose the CodeAtlas index over the
+              Model Context Protocol so external clients (Claude Desktop, etc.)
+              can perform semantic search against your project.</li>
         </ul>
         <h4>Supported languages</h4>
         <p>Kotlin and Java in this release. The
@@ -42,11 +43,11 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Project-level CodeAtlasIndexService is a light service (@Service annotation). -->
-        <toolWindow
-            id="CodeAtlas"
-            anchor="right"
-            icon="AllIcons.Toolwindows.ToolWindowFind"
-            factoryClass="com.bugdigger.codeatlas.ui.CodeAtlasToolWindowFactory"/>
+        <searchEverywhereContributor
+            implementation="com.bugdigger.codeatlas.searcheverywhere.CodeAtlasSearchContributorFactory"/>
+        <statusBarWidgetFactory
+            id="CodeAtlasStatusBarWidget"
+            implementation="com.bugdigger.codeatlas.statusbar.CodeAtlasStatusBarWidgetFactory"/>
         <postStartupActivity
             implementation="com.bugdigger.codeatlas.startup.CodeAtlasStartupActivity"/>
         <postStartupActivity
@@ -73,8 +74,8 @@
         <action
             id="CodeAtlas.AskAction"
             class="com.bugdigger.codeatlas.actions.AskCodeAtlasAction"
-            text="Ask CodeAtlas"
-            description="Search CodeAtlas for the selected text, or for the symbol at the caret.">
+            text="Search with CodeAtlas"
+            description="Open Search Everywhere on the CodeAtlas tab, pre-filled with the selection or symbol at the caret.">
             <add-to-group group-id="EditorPopupMenu" anchor="last"/>
         </action>
 
@@ -88,7 +89,7 @@
                 id="CodeAtlas.FocusSearchAction"
                 class="com.bugdigger.codeatlas.actions.FocusCodeAtlasSearchAction"
                 text="Focus Search"
-                description="Open the CodeAtlas tool window and focus the search field."/>
+                description="Open Search Everywhere on the CodeAtlas tab."/>
             <action
                 id="CodeAtlas.RebuildIndexAction"
                 class="com.bugdigger.codeatlas.actions.RebuildIndexAction"

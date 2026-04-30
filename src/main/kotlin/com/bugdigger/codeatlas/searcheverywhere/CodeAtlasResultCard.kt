@@ -1,4 +1,4 @@
-package com.bugdigger.codeatlas.ui
+package com.bugdigger.codeatlas.searcheverywhere
 
 import com.bugdigger.codeatlas.index.ChunkKind
 import com.bugdigger.codeatlas.search.RankedResult
@@ -7,16 +7,17 @@ import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Font
 import javax.swing.BoxLayout
 import javax.swing.Icon
 import javax.swing.JPanel
 
 /**
- * Row component rendered for each [RankedResult] in the tool-window result list.
- * Lays out: [icon] [qualified name + signature stacked] [file name].
+ * Row component rendered for each [RankedResult] in the Search Everywhere
+ * "Code Atlas" tab. Lays out: [icon] [qualified name + signature stacked] [file name].
  */
-class ResultCard : JPanel(BorderLayout(8, 0)) {
+class CodeAtlasResultCard : JPanel(BorderLayout(8, 0)) {
 
     private val iconLabel = JBLabel()
     private val nameLabel = JBLabel().apply { font = font.deriveFont(Font.BOLD) }
@@ -46,7 +47,7 @@ class ResultCard : JPanel(BorderLayout(8, 0)) {
         pathLabel.text = fileName(chunk.virtualFileUrl)
     }
 
-    fun applySelection(bg: java.awt.Color, fg: java.awt.Color, selected: Boolean) {
+    fun applySelection(bg: Color, fg: Color, selected: Boolean) {
         background = bg
         nameLabel.foreground = fg
         sigLabel.foreground = if (selected) fg else JBColor.GRAY

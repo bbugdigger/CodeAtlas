@@ -1,21 +1,20 @@
 package com.bugdigger.codeatlas.actions
 
-import com.bugdigger.codeatlas.ui.CodeAtlasToolWindowAccess
+import com.bugdigger.codeatlas.searcheverywhere.CodeAtlasSearchContributor
+import com.intellij.ide.actions.searcheverywhere.SearchEverywhereManager
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.components.service
 import com.intellij.openapi.editor.Editor
 
 /**
- * Editor-popup action that drives the CodeAtlas tool window from the current editor:
+ * Editor-popup action that opens Search Everywhere on the "Code Atlas" tab,
+ * pre-filled with a query derived from the current editor:
  *  - If there's a non-empty selection, use it verbatim as the query.
  *  - Otherwise, extract the identifier surrounding the caret.
  *
- * Activates the tool window, fills the search bar, and runs the search immediately
- * (bypassing the SearchBar debounce). Disabled when no editor is in context or no
- * usable query can be extracted.
+ * Disabled when no editor is in context or no usable query can be extracted.
  */
 class AskCodeAtlasAction : AnAction() {
 
@@ -32,7 +31,8 @@ class AskCodeAtlasAction : AnAction() {
         val project = e.project ?: return
         val editor = e.getData(CommonDataKeys.EDITOR) ?: return
         val query = extractQuery(editor) ?: return
-        project.service<CodeAtlasToolWindowAccess>().runSearch(project, query)
+        SearchEverywhereManager.getInstance(project)
+            .show(CodeAtlasSearchContributor.ID, query, e)
     }
 
     companion object {
