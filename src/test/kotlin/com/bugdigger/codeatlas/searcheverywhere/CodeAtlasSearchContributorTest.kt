@@ -5,7 +5,6 @@ import com.bugdigger.codeatlas.index.ChunkKind
 import com.bugdigger.codeatlas.index.CodeAtlasIndexService
 import com.bugdigger.codeatlas.index.CodeChunk
 import com.bugdigger.codeatlas.search.RankedResult
-import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.actionSystem.Presentation
@@ -25,7 +24,7 @@ class CodeAtlasSearchContributorTest : BasePlatformTestCase() {
         project.service<CodeAtlasIndexService>().embedder = HashEmbeddingProvider(dim = testDim)
     }
 
-    fun testFetchWeightedElementsReturnsResultsInScoreOrder() {
+    fun testFetchElementsReturnsResultsInScoreOrder() {
         val service = project.service<CodeAtlasIndexService>()
         service.seedForTests(
             listOf(
@@ -41,23 +40,25 @@ class CodeAtlasSearchContributorTest : BasePlatformTestCase() {
         )
 
         val contributor = CodeAtlasSearchContributor(syntheticEvent(), project)
-        val collected = mutableListOf<FoundItemDescriptor<RankedResult>>()
-        val consumer = Processor<FoundItemDescriptor<RankedResult>> { fid ->
-            collected.add(fid)
+        val collected = mutableListOf<RankedResult>()
+        val consumer = Processor<RankedResult> { r ->
+            collected.add(r)
             true
         }
 
-        contributor.fetchWeightedElements("alpha", EmptyProgressIndicator(), consumer)
+        contributor.fetchElements("alpha", EmptyProgressIndicator(), consumer)
 
         assertFalse(
             "Expected at least one result for the seeded query, got none",
             collected.isEmpty(),
         )
-        // Weights must be monotonically non-increasing in the order they were emitted.
-        for (i in 1 until collected.size) {
+        // Priorities (used by the platform to order results) must be monotonically
+        // non-increasing in the order they were emitted.
+        val priorities = collected.map { contributor.getElementPriority(it, "alpha") }
+        for (i in 1 until priorities.size) {
             assertTrue(
-                "Weights out of order at index $i: ${collected[i - 1].weight} < ${collected[i].weight}",
-                collected[i - 1].weight >= collected[i].weight,
+                "Priorities out of order at index $i: ${priorities[i - 1]} < ${priorities[i]}",
+                priorities[i - 1] >= priorities[i],
             )
         }
     }
@@ -71,7 +72,7 @@ class CodeAtlasSearchContributorTest : BasePlatformTestCase() {
 
         val contributor = CodeAtlasSearchContributor(syntheticEvent(), project)
         var called = false
-        contributor.fetchWeightedElements(
+        contributor.fetchElements(
             pattern = "",
             progressIndicator = EmptyProgressIndicator(),
             consumer = Processor { called = true; true },

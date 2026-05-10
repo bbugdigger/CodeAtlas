@@ -3,10 +3,8 @@ package com.bugdigger.codeatlas.searcheverywhere
 import com.bugdigger.codeatlas.index.CodeAtlasIndexService
 import com.bugdigger.codeatlas.index.IndexState
 import com.bugdigger.codeatlas.search.RankedResult
-import com.intellij.ide.actions.searcheverywhere.FoundItemDescriptor
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereContributor
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereContributorFactory
-import com.intellij.ide.actions.searcheverywhere.WeightedSearchEverywhereContributor
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.service
@@ -23,10 +21,16 @@ import javax.swing.ListCellRenderer
  * Search Everywhere contributor that exposes CodeAtlas's semantic index as a
  * dedicated "Code Atlas" tab (Shift-Shift). Replaces the right-side tool window.
  *
- * Each call to [fetchWeightedElements] runs the same retrieval pipeline used
- * elsewhere in the plugin (`CodeAtlasIndexService.search`), then maps each
- * [RankedResult]'s `finalScore` (0..1) to an integer weight (0..10_000) so the
+ * Each call to [fetchElements] runs the same retrieval pipeline used elsewhere
+ * in the plugin (`CodeAtlasIndexService.search`). [getElementPriority] maps each
+ * [RankedResult]'s `finalScore` (0..1) to an integer priority (0..10_000) so the
  * platform's natural ordering reflects our re-ranked output.
+ *
+ * Implements the non-weighted [SearchEverywhereContributor] rather than the
+ * weighted variant: the latter's primary fetch method is marked
+ * `@ApiStatus.Internal` and would fail Marketplace verification. The base
+ * interface's [getElementPriority] hook is fully public and gives us the same
+ * ordering control.
  *
  * The index state is reflected only via [getAdvertisement] (gray hint text under
  * the input). When the index is still building, this contributor returns no
@@ -35,7 +39,7 @@ import javax.swing.ListCellRenderer
 class CodeAtlasSearchContributor(
     private val event: AnActionEvent,
     private val project: Project,
-) : WeightedSearchEverywhereContributor<RankedResult> {
+) : SearchEverywhereContributor<RankedResult> {
 
     override fun getSearchProviderId(): String = ID
     override fun getGroupName(): String = "Code Atlas"
@@ -60,10 +64,10 @@ class CodeAtlasSearchContributor(
         }
     }
 
-    override fun fetchWeightedElements(
+    override fun fetchElements(
         pattern: String,
         progressIndicator: ProgressIndicator,
-        consumer: Processor<in FoundItemDescriptor<RankedResult>>,
+        consumer: Processor<in RankedResult>,
     ) {
         if (pattern.isBlank()) return
         val service = project.service<CodeAtlasIndexService>()
@@ -74,12 +78,20 @@ class CodeAtlasSearchContributor(
             { runBlockingCancellable { service.search(pattern, RESULT_LIMIT) } },
             progressIndicator,
         )
+        // Results are already sorted by finalScore desc; getElementPriority keeps platform
+        // ordering consistent with that when results are merged with other contributors.
         for (r in results) {
             progressIndicator.checkCanceled()
-            val weight = (r.finalScore.coerceIn(0f, 1f) * 10_000f).toInt()
-            if (!consumer.process(FoundItemDescriptor(r, weight))) return
+            if (!consumer.process(r)) return
         }
     }
+
+    // The base method is annotated @Deprecated on the IntelliJ side, but it has no
+    // public replacement and is still the documented hook for influencing item order
+    // — and it is not @ApiStatus.Internal, so it passes Marketplace verification.
+    @Suppress("OVERRIDE_DEPRECATION")
+    override fun getElementPriority(element: RankedResult, searchPattern: String): Int =
+        (element.finalScore.coerceIn(0f, 1f) * 10_000f).toInt()
 
     override fun processSelectedItem(
         selected: RankedResult,

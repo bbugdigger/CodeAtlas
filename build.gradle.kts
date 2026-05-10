@@ -9,7 +9,7 @@ plugins {
 
 group = "com.bugdigger"
 // Override on the command line for snapshot builds: `-Pversion=1.0.1-SNAPSHOT`
-version = (project.findProperty("version") as? String).takeUnless { it == "unspecified" } ?: "1.0.0"
+version = (project.findProperty("version") as? String).takeUnless { it == "unspecified" } ?: "1.1.1"
 
 repositories {
     mavenCentral()
@@ -65,6 +65,13 @@ intellijPlatform {
         }
 
         changeNotes = """
+            <h3>1.1.1</h3>
+            <ul>
+              <li>Marketplace compatibility: replaced the Search Everywhere
+                  contributor's reliance on an <code>@ApiStatus.Internal</code>
+                  platform method with the public ordering hook. No user-facing
+                  behavior change.</li>
+            </ul>
             <h3>1.1.0</h3>
             <ul>
               <li>Search Everywhere integration: press <em>Shift-Shift</em>, switch to the
